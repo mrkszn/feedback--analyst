@@ -152,6 +152,7 @@ async def test_voice_message_transcribes_then_dialogues(state: FSMContext) -> No
 
     # continue_dialogue вызывался с history, содержащей transcript
     p_cd.assert_awaited_once()
+    assert p_cd.await_args is not None
     call_kwargs = p_cd.await_args.kwargs
     assert any(h.get("content") == "это голосовой текст" for h in call_kwargs["history"])
 
@@ -261,6 +262,7 @@ async def test_offer_survey_empty_pool_finalizes(state: FSMContext) -> None:
 
     # _finalize_session вызван с answers=[]
     p_finalize.assert_awaited_once()
+    assert p_finalize.await_args is not None
     call_kwargs = p_finalize.await_args.kwargs
     assert call_kwargs["answers"] == []
     # summary прокидывается как FeedbackSummary (model)

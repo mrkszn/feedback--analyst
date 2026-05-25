@@ -90,6 +90,7 @@ async def test_consent_yes_with_questions_starts_interview(state: FSMContext) ->
 
     # _ask_next_question вызван ровно один раз с (message, state)
     p_ask.assert_awaited_once()
+    assert p_ask.await_args is not None
     assert p_ask.await_args.args[0] is cb.message
     assert p_ask.await_args.args[1] is state
 
@@ -131,11 +132,13 @@ async def test_consent_yes_empty_selection_finalizes(state: FSMContext) -> None:
 
     # Fallback-message отправлен
     cb.message.answer.assert_awaited_once()
+    assert cb.message.answer.await_args is not None
     text = cb.message.answer.await_args.args[0]
     assert "Кажется" in text or "Спасибо" in text
 
     p_ask.assert_not_awaited()
     p_finalize.assert_awaited_once()
+    assert p_finalize.await_args is not None
     assert p_finalize.await_args.kwargs["answers"] == []
     # summary — это FeedbackSummary
     assert p_finalize.await_args.kwargs["summary"].sentiment == "positive"
@@ -161,6 +164,7 @@ async def test_consent_yes_empty_pool_finalizes(state: FSMContext) -> None:
     p_select.assert_not_awaited()
     p_ask.assert_not_awaited()
     p_finalize.assert_awaited_once()
+    assert p_finalize.await_args is not None
     assert p_finalize.await_args.kwargs["answers"] == []
 
 
@@ -178,6 +182,7 @@ async def test_consent_no_sends_goodbye_and_finalizes(state: FSMContext) -> None
 
     # Прощание отправлено
     cb.message.answer.assert_awaited_once()
+    assert cb.message.answer.await_args is not None
     text = cb.message.answer.await_args.args[0]
     assert "Спасибо большое за рассказ" in text
 
@@ -187,6 +192,7 @@ async def test_consent_no_sends_goodbye_and_finalizes(state: FSMContext) -> None
 
     # _finalize_session(answers=[]) с FeedbackSummary
     p_finalize.assert_awaited_once()
+    assert p_finalize.await_args is not None
     call_kwargs = p_finalize.await_args.kwargs
     assert call_kwargs["answers"] == []
     assert call_kwargs["summary"].sentiment == "positive"
