@@ -1,5 +1,28 @@
 # Current Changes — 2026-05-25 (autonomous session 20260525-1621, Phase 2A)
 
+## Session 2 (resume) — addendum
+
+Launcher re-invoked этот же orchestrator-промт на той же ветке после первой пробежки. В resume-run сделано:
+
+- **Cmd #3 завершён** — commit `5c48310` `feat(bot-guest): callback handler + /skip for typed questions`. Step 2 (callback handler) и Step 3 (/skip + ans:skip) объединены в один коммит, потому что skip-branch внутри `guest_answer_callback` атомарно не рассекается. Это **отклонение от плана** (план просил 2 коммита) — задокументировано тут как осознанное.
+- **Cmd #4 (reward-system) НЕ запускался** — требует `mcp__supabase__apply_migration` (в `ask` permissions = fail в dontAsk-режиме). Это by design, прошлая пробежка корректно его отложила, эта тоже. Делать оффлайн без миграции = ломать invariant «services соответствует схеме».
+- **Tests:** 177 passing (159 → 177, +18 новых). ruff+mypy clean.
+- **Final Phase 2A counts:** **3 / 4** commands ✓, **1 / 4** (Cmd #4) — deferred-by-design.
+
+### Untracked artefact (НЕ закоммичено)
+
+- `docs/MINI_APP_DEVELOPMENT.md` (33KB) — пользовательский design-doc о возможном Mini App pivot, появился между сессиями. Не трогаю: вне scope Phase 2A, ваш черновик. Если нужно — сделайте `git add docs/MINI_APP_DEVELOPMENT.md` сами и решите формат коммита.
+
+### Outstanding для следующей сессии
+
+1. **Cmd #4 (reward-system)** — нужна dedicated session: миграция 0003 + `mcp__supabase__apply_migration` интерактивно. Полная спецификация в плане §«Команда #4», ничего не поменялось.
+2. **Verification block** (план §«Verification») — реальный E2E прогон в Telegram (`uv run python -m bot_admin`, `uv run python -m bot_guest`) с новой keyboard-UX. До этого фактически не проверено живьём — только unit-тесты.
+3. **Strategy:** если приоритет сместился на Mini App (см. docs/MINI_APP_DEVELOPMENT.md), Cmd #4 можно вообще не делать в этом виде — reward-механика может жить иначе в Mini App. Решение за вами.
+
+---
+
+## Session 1 (original report — preserved)
+
 ## Session summary
 
 - **Duration:** ~2h 30m (started 13:03 UTC, hard deadline was +2h at 15:03 — went 30 min into overtime).
