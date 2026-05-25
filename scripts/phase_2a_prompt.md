@@ -58,13 +58,50 @@
 
 **Паттерн строго:** `TeamDelete` → verify → `TeamCreate`. Не сокращай.
 
-## Bash в этой сессии
+## Bash — жёсткие правила (для orchestrator'а И для subagent'ов)
 
-В `Bash` **избегай compound-команд с `cd`**: например `cd /path && grep ...` фейлится в `dontAsk` mode (исторически `cd` отсутствовал в allowlist; сейчас добавлен, но безопаснее всё равно использовать абсолютные пути):
+### Контекст архитектуры
 
-✅ `grep -n "pattern" /Users/markdekker/Desktop/Need\ eat\ bot/telegram-waiter/path/file | head -80`
-✅ `find /Users/markdekker/Desktop/Need\ eat\ bot/telegram-waiter -name "*.py" | head -20`
-❌ `cd /Users/.../telegram-waiter && grep ... | head ...`
+Permission-mode `dontAsk` стоит **только на твоей parent-сессии**. **Subagent'ы** (team-lead, implementer, tester, reviewer внутри `TeamCreate`) **НЕ наследуют** этот режим — они работают по дефолтному flow и **показывают interactive-промт пользователю** на любую операцию вне allowlist. Каждый такой промт — минута простоя сессии: пользователю надо переключиться, прочитать, ответить.
+
+**Твоя задача и задача каждого team-lead'а** — минимизировать promptable операции, чтобы автономный режим оставался автономным.
+
+### Правило #1: НИКАКИХ compound-команд в Bash
+
+Matcher Claude Code НЕ разбирает compound через `;`, `&&`, `|`, `||`. Видит командуполностью и пытается матчить как один pattern → не находит → промт пользователю.
+
+✅ Один Bash-вызов = одна команда. Если нужно несколько действий — несколько отдельных Bash-вызовов.
+
+```
+✅ Bash(grep -n "pattern" /Users/markdekker/Desktop/Need\ eat\ bot/telegram-waiter/path/file)
+✅ Bash(head -80 /tmp/output)                                    # отдельным вызовом
+
+❌ Bash(cat config.json; ls agent/nodes/)                        # `;` — DENY
+❌ Bash(cd /path && grep ...)                                    # `&&` — DENY
+❌ Bash(find . -name "*.py" | head -20)                          # `|` — DENY
+❌ Bash(uv run ruff check . && uv run mypy .)                    # `&&` — DENY
+```
+
+**Исключение из правила:** проверочные пайплайны разработческого тулинга, которые ты делаешь сам (parent-агент), а не subagent'ы. Parent в `dontAsk` — у него compound не спросит, просто молча fail-нет; но даже там используй split, чтобы видеть какой именно шаг сломался.
+
+### Правило #2: Все пути — внутри `telegram-waiter/`
+
+✅ `Bash(cat /Users/markdekker/Desktop/Need\ eat\ bot/telegram-waiter/agent/nodes/analyze.py)`
+❌ `Bash(cat /Users/markdekker/.claude/teams/fn-X/config.json)` — путь вне проекта, subagent попросит подтверждение
+
+Если действительно нужна team-config или что-то ещё из `~/.claude/` — НЕ читай через Bash. Используй встроенные tools (Read, etc.) — они идут через harness без bash-permission-flow.
+
+### Правило #3: Инструктируй team-lead'ов в их promt'ах
+
+Когда ты пишешь промт для `team-lead` через `Agent` tool, **включай в него эти 3 правила** дословно. Не предполагай, что team-lead «по умолчанию знает». Пример обязательной вставки в team-lead-промт:
+
+> **Bash discipline (критично):** не используй compound-команды (`;`, `&&`, `|`). Один Bash-вызов = одна команда. Все пути — внутри `/Users/markdekker/Desktop/Need eat bot/telegram-waiter/`. Compound будет блокировать сессию ожиданием подтверждения от человека.
+
+То же — для implementer'а, tester'а (reviewer — read-only Explore, ему bash почти не нужен).
+
+### Что делать если ты ловишь себя за compound
+
+Прерви операцию. Разбей на отдельные Bash-вызовы. Если уже промт у юзера висит — wait, юзер сам ответит. Не повторяй ту же compound — переписывай на split.
 
 ## Спавн команды (паттерн)
 
