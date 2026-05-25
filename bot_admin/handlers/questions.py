@@ -1,9 +1,14 @@
 import asyncio
 
-from aiogram import Router
+from aiogram import F, Router
 from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 
 from bot_common.fsm.states import AdminFlow
 from db.client import get_supabase
@@ -18,7 +23,7 @@ from services.questions import (
 router = Router(name="admin_questions")
 
 
-async def _require_admin(message: Message) -> bool:
+async def require_admin(message: Message) -> bool:
     user = message.from_user
     if user is None:
         return False
@@ -30,7 +35,7 @@ async def _require_admin(message: Message) -> bool:
 
 @router.message(Command("questions"))
 async def admin_questions_list(message: Message) -> None:
-    if not await _require_admin(message):
+    if not await require_admin(message):
         return
     rows = await list_questions()
     if not rows:
@@ -43,16 +48,37 @@ async def admin_questions_list(message: Message) -> None:
     await message.answer("\n".join(lines))
 
 
+_ADD_QUESTION_TEXT_PROMPT = (
+    "Отправьте текст вопроса в формате:\n"
+    "<metric_key>|<expected_type>|<text>[|enum1,enum2,...]\n"
+    "Пример: service_speed|number|Оцените скорость обслуживания от 1 до 5"
+)
+
+
 @router.message(Command("add_question"))
 async def admin_question_add(message: Message, state: FSMContext) -> None:
-    if not await _require_admin(message):
+    if not await require_admin(message):
+        return
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="Текстом", callback_data="addq:text"),
+                InlineKeyboardButton(text="Голосом", callback_data="addq:voice"),
+            ]
+        ]
+    )
+    await message.answer("Как добавить?", reply_markup=keyboard)
+
+
+@router.callback_query(F.data == "addq:text")
+async def admin_question_add_text(callback: CallbackQuery, state: FSMContext) -> None:
+    if callback.from_user is None or not await is_admin(callback.from_user.id):
+        await callback.answer("Только для админов", show_alert=True)
         return
     await state.set_state(AdminFlow.AWAITING_QUESTION_TEXT)
-    await message.answer(
-        "Отправьте текст вопроса в формате:\n"
-        "<metric_key>|<expected_type>|<text>[|enum1,enum2,...]\n"
-        "Пример: service_speed|number|Оцените скорость обслуживания от 1 до 5"
-    )
+    if isinstance(callback.message, Message):
+        await callback.message.answer(_ADD_QUESTION_TEXT_PROMPT)
+    await callback.answer()
 
 
 @router.message(AdminFlow.AWAITING_QUESTION_TEXT)
@@ -85,7 +111,7 @@ async def admin_question_add_save(message: Message, state: FSMContext) -> None:
 
 @router.message(Command("edit_question"))
 async def admin_question_edit(message: Message, command: CommandObject) -> None:
-    if not await _require_admin(message):
+    if not await require_admin(message):
         return
     args = (command.args or "").strip()
     if "|" not in args:
@@ -111,7 +137,7 @@ async def admin_question_edit(message: Message, command: CommandObject) -> None:
 
 @router.message(Command("delete_question"))
 async def admin_question_delete(message: Message, command: CommandObject) -> None:
-    if not await _require_admin(message):
+    if not await require_admin(message):
         return
     qid = (command.args or "").strip()
     if not qid:
@@ -127,7 +153,7 @@ async def admin_question_delete(message: Message, command: CommandObject) -> Non
 
 @router.message(Command("invite_admin"))
 async def admin_invite_admin(message: Message, command: CommandObject) -> None:
-    if not await _require_admin(message):
+    if not await require_admin(message):
         return
     arg = (command.args or "").strip()
     try:

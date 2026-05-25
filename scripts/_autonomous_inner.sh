@@ -36,6 +36,7 @@ declare -a EXTRA_ALLOW=(
     "Bash(pre-commit:*)"
 
     # --- Утилиты shell (часто нужны в pipelines) ---
+    "Bash(cd:*)"
     "Bash(date:*)"
     "Bash(jq:*)"
     "Bash(head:*)"
@@ -49,8 +50,12 @@ declare -a EXTRA_ALLOW=(
     "Bash(test:*)"
 
     # --- Спавн агентов и задач ---
+    # TeamCreate создаёт команду; TeamDelete КРИТИЧНО для последовательных команд:
+    # один parent-агент = одна active team одновременно, нужен TeamDelete перед
+    # созданием следующей. Урок autonomous session 20260525-1621.
     "Agent"
     "TeamCreate"
+    "TeamDelete"
     "TaskOutput"
     "TaskStop"
 
