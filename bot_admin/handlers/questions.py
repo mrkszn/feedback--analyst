@@ -18,7 +18,7 @@ from services.questions import (
 router = Router(name="admin_questions")
 
 
-async def _require_admin(message: Message) -> bool:
+async def require_admin(message: Message) -> bool:
     user = message.from_user
     if user is None:
         return False
@@ -30,7 +30,7 @@ async def _require_admin(message: Message) -> bool:
 
 @router.message(Command("questions"))
 async def admin_questions_list(message: Message) -> None:
-    if not await _require_admin(message):
+    if not await require_admin(message):
         return
     rows = await list_questions()
     if not rows:
@@ -45,7 +45,7 @@ async def admin_questions_list(message: Message) -> None:
 
 @router.message(Command("add_question"))
 async def admin_question_add(message: Message, state: FSMContext) -> None:
-    if not await _require_admin(message):
+    if not await require_admin(message):
         return
     await state.set_state(AdminFlow.AWAITING_QUESTION_TEXT)
     await message.answer(
@@ -85,7 +85,7 @@ async def admin_question_add_save(message: Message, state: FSMContext) -> None:
 
 @router.message(Command("edit_question"))
 async def admin_question_edit(message: Message, command: CommandObject) -> None:
-    if not await _require_admin(message):
+    if not await require_admin(message):
         return
     args = (command.args or "").strip()
     if "|" not in args:
@@ -111,7 +111,7 @@ async def admin_question_edit(message: Message, command: CommandObject) -> None:
 
 @router.message(Command("delete_question"))
 async def admin_question_delete(message: Message, command: CommandObject) -> None:
-    if not await _require_admin(message):
+    if not await require_admin(message):
         return
     qid = (command.args or "").strip()
     if not qid:
@@ -127,7 +127,7 @@ async def admin_question_delete(message: Message, command: CommandObject) -> Non
 
 @router.message(Command("invite_admin"))
 async def admin_invite_admin(message: Message, command: CommandObject) -> None:
-    if not await _require_admin(message):
+    if not await require_admin(message):
         return
     arg = (command.args or "").strip()
     try:
