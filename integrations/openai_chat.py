@@ -61,7 +61,17 @@ async def chat_completion[T: BaseModel](
 
     lc_messages = _to_lc_messages(messages)
     llm: BaseChatModel = get_chat_model(model=model, temperature=temperature, timeout=timeout)
-    runnable = llm.with_structured_output(response_model) if response_model is not None else llm
+    # method="function_calling" — без него langchain-openai 0.3+ использует strict
+    # structured-output, где все поля схемы должны быть в `required`. Optional поля
+    # (например `insights` в DialogueTurn) вызывают BadRequest 400 от OpenAI, и
+    # handler тихо падает (юзер видит «бот зависает»). function_calling снимает
+    # этот strict-check и совместим со всеми текущими и будущими pydantic-моделями.
+    # Урок live-теста natural-dialogue 2026-05-25 (см. current_changes.md).
+    runnable = (
+        llm.with_structured_output(response_model, method="function_calling")
+        if response_model is not None
+        else llm
+    )
 
     retrying = AsyncRetrying(
         stop=stop_after_attempt(3),

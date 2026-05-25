@@ -59,7 +59,7 @@ async def test_chat_completion_structured(mocker: MockerFixture) -> None:
     assert isinstance(result, _Sentiment)
     assert result.label == "pos"
     assert result.score == 0.9
-    llm.with_structured_output.assert_called_once_with(_Sentiment)
+    llm.with_structured_output.assert_called_once_with(_Sentiment, method="function_calling")
 
 
 async def test_empty_messages_raises() -> None:
