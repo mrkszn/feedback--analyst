@@ -1,0 +1,42 @@
+# Pre-commit hooks — автоматический gate перед каждым git commit.
+# Установка: uv run pre-commit install
+# Прогон руками: uv run pre-commit run --all-files
+# Обновить версии: uv run pre-commit autoupdate
+
+repos:
+  # ---------------------------------------------------------------------------
+  # Ruff — lint + format (заменяет black/isort/flake8)
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Версию держим синхронно с pyproject.toml dev-deps (uv лочит точно).
+    # Обновляй парой: `uv lock --upgrade-package ruff` + здесь `rev: v<new>`.
+    rev: v0.15.14
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # ---------------------------------------------------------------------------
+  # Базовые проверки безопасности и гигиены файлов
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files       # >500 KB — почти всегда ошибка (binary slipped in)
+        args: [--maxkb=500]
+      - id: check-merge-conflict          # ловит "<<<<<<< HEAD" leftovers
+      - id: detect-private-key            # SSH/GPG private keys в diff
+      - id: end-of-file-fixer             # каждый текстовый файл должен заканчиваться \n
+      - id: trailing-whitespace           # автофикс trailing spaces
+      - id: check-yaml                    # синтаксис YAML (включая этот файл и CI)
+      - id: check-toml                    # синтаксис pyproject.toml
+      - id: check-json                    # синтаксис .json (включая .claude/settings.local.json)
+      - id: check-case-conflict           # имена файлов, совпадающие при case-insensitive FS
+      - id: mixed-line-ending             # унификация \n vs \r\n
+        args: [--fix=lf]
+
+  # ---------------------------------------------------------------------------
+  # Mypy — type check (локально только; в CI ещё раз)
+  # ---------------------------------------------------------------------------
+  # Намеренно НЕ ставим mypy в pre-commit — он медленный (5-10s на проекте)
+  # и часто требует .venv. В CI прогон точно отловит ошибки типов.

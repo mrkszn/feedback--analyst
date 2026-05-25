@@ -49,6 +49,7 @@ tmp/
 *.tmp
 *.log
 logs/
+runs/                                # автономные сессии: логи + dyn-промты
 voice_cache/
 *.ogg
 *.mp3
@@ -60,7 +61,10 @@ voice_cache/
 # =============================================================================
 # IDE / OS
 # =============================================================================
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/extensions.json
 .idea/
 *.swp
 *.swo
