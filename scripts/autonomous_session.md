@@ -24,6 +24,18 @@
 
 Идёшь по цепочке из `docs/functions/README.md`. Стартовая точка — `utils_voice_download.md` (если уже закоммичена — переходи к Next).
 
+### 🚨 ЖЁСТКОЕ ПРАВИЛО — commit-before-next
+
+**Запрещено** начинать TeamCreate для функции `N+1`, пока не выполнено **все** для функции `N`:
+1. Локальная верификация прошла (ruff + mypy + pytest все зелёные).
+2. **Коммит сделан** (`git log -1 --oneline` показывает свежий commit с conventional-commits-сообщением).
+3. `git status --short` показывает **0** uncommitted файлов из работы по функции N (могут оставаться только artifacts вроде `current_changes.md`, `tmp/`).
+
+Если `git commit` фейлится (например, permission denied) — **СТОП**. Не двигайся к функции N+1. Запиши blocker в `current_changes.md` под "🚨 Blocker for the human" и предложи фикс. Лучше остановить сессию на 1 функции с зафиксированным состоянием, чем сделать 33 без коммитов.
+
+Это не пожелание, а инвариант workflow. Урок из autonomous session 20260525-1200, где 33 функции остались uncommitted из-за launcher-бага — потеряли всю гранулярность истории.
+
+
 Для каждой функции:
 
 1. Прочитай `docs/functions/<file>.md` целиком (Назначение, Сигнатура, Шаги, Тесты, /goal, Команда, Next).

@@ -89,10 +89,15 @@ cp "$SETTINGS" "$SETTINGS_BAK"
 # Превратить bash-массив в JSON array через jq
 EXTRA_JSON=$(printf '%s\n' "${EXTRA_ALLOW[@]}" | jq -R . | jq -s .)
 
-# Слить с существующим allow + дедуп + сортировка
-jq --argjson extra "$EXTRA_JSON" \
-    '.permissions.allow = ((.permissions.allow + $extra) | unique | sort)' \
-    "$SETTINGS_BAK" > "$SETTINGS"
+# Слить с существующим allow + дедуп + сортировка.
+# КРИТИЧНО: в `dontAsk` mode правило в `ask` побеждает над таким же в `allow`.
+# Поэтому для каждой extra-permission нужно ТАКЖЕ удалить её из `ask`
+# (если она там была), иначе git commit и др. ask-операции продолжат
+# фейлиться. Урок autonomous session 20260525-1200 (см. current_changes.md).
+jq --argjson extra "$EXTRA_JSON" '
+    .permissions.allow = ((.permissions.allow + $extra) | unique | sort)
+    | .permissions.ask  = ((.permissions.ask // []) - $extra | unique | sort)
+' "$SETTINGS_BAK" > "$SETTINGS"
 
 echo ">>> [autonomous] allowlist расширен на ${#EXTRA_ALLOW[@]} разрешений"
 echo ">>> [autonomous] бэкап: $SETTINGS_BAK"
