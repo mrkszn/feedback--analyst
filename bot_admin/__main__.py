@@ -5,6 +5,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot_admin.handlers import auth, questions
+from bot_common.middleware import TypingMiddleware
 from config import settings
 
 
@@ -15,6 +16,9 @@ async def main() -> None:
 
     bot = Bot(token=settings.telegram_admin_bot_token)
     dp = Dispatcher(storage=MemoryStorage())
+    # Все message-хэндлеры получают «бот печатает» автоматически —
+    # видно когда идёт DB-call. См. bot_common/middleware.py.
+    dp.message.middleware(TypingMiddleware())
     dp.include_router(auth.router)
     dp.include_router(questions.router)
 
