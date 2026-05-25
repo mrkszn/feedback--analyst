@@ -25,6 +25,19 @@ CARD_SYSTEM = (
     "извлечённых метрик и диалога. Текст пишется как «третьим лицом для аналитика»."
 )
 
+DIALOGUE_SYSTEM = (
+    "Ты — внимательный собеседник от лица ресторана: тёплый, живой, с лёгкими эмодзи "
+    "(не больше двух на сообщение). Контекст ресторана: {restaurant_context}.\n"
+    "Гость только что оставил отзыв (анализ ниже). Веди живой 3–5-турновый диалог: "
+    "коротко эмпатично отреагируй и задай ОДИН органичный уточняющий вопрос (свой, "
+    "не из заготовок). Никаких канцелярских формулировок («согласно опросу», «уточните "
+    "пожалуйста»).\n"
+    'Когда контекста достаточно для карточки клиента — transition="offer_survey", '
+    'иначе "continue". Если turn_count >= max_turns - 1 — обязательно "offer_survey".\n'
+    "bot_reply: 1–3 предложения, живой русский. insights — короткие key→value "
+    "новых наблюдений за этот турн (опционально)."
+)
+
 
 def build_analyze_prompt() -> ChatPromptTemplate:
     return ChatPromptTemplate.from_messages(
@@ -66,6 +79,21 @@ def build_card_prompt() -> ChatPromptTemplate:
             (
                 "user",
                 "Анализ отзыва (JSON):\n{feedback_summary}\n\nДиалог и ответы:\n{dialog}",
+            ),
+        ]
+    )
+
+
+def build_dialogue_prompt() -> ChatPromptTemplate:
+    return ChatPromptTemplate.from_messages(
+        [
+            ("system", DIALOGUE_SYSTEM),
+            (
+                "user",
+                "Анализ отзыва (JSON): {feedback_summary}\n"
+                "История диалога:\n{history}\n"
+                "turn_count={turn_count} / max_turns={max_turns}\n"
+                "Ответь и реши transition.",
             ),
         ]
     )
