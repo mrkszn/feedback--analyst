@@ -1,7 +1,7 @@
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 from aiogram.utils.chat_action import ChatActionSender
 
 from agent.nodes.analyze import analyze_feedback
@@ -9,6 +9,7 @@ from agent.nodes.card import build_client_card
 from agent.nodes.extract import extract_metric_from_answer
 from agent.nodes.select import select_adaptive_questions
 from bot_common.fsm.states import GuestFlow
+from bot_guest.keyboards import build_question_keyboard
 from integrations.openai_embed import embed_text
 from integrations.pinecone import upsert_client_card_vector
 from integrations.whisper import transcribe_voice
@@ -104,7 +105,33 @@ async def _ask_next_question(message: Message, state: FSMContext) -> None:
     text = q["text"]
     sid = data["session_id"]
     await append_session_message(sid, "bot", text)
-    await message.answer(text)
+    keyboard = build_question_keyboard(q)
+    if keyboard is None:
+        await message.answer(text)
+    else:
+        await message.answer(text, reply_markup=keyboard)
+
+
+def _marked_value_from_callback(value: str, expected_type: str) -> dict[str, object]:
+    """Convert callback payload (`ans:<value>`) into marked_value per expected_type."""
+    if expected_type == "boolean":
+        if value == "yes":
+            return {"value": True}
+        if value == "no":
+            return {"value": False}
+        raise ValueError(f"boolean callback expects yes/no, got {value!r}")
+    if expected_type == "number":
+        return {"value": int(value)}
+    if expected_type == "enum":
+        return {"value": value}
+    raise ValueError(f"callback answer not supported for expected_type={expected_type!r}")
+
+
+def _answer_text_from_callback(value: str, expected_type: str) -> str:
+    """Human-readable answer_text persisted alongside marked_value."""
+    if expected_type == "boolean":
+        return "Да" if value == "yes" else "Нет"
+    return value
 
 
 @router.message(GuestFlow.AWAITING_FEEDBACK, F.text)
@@ -137,6 +164,18 @@ async def guest_feedback_voice(message: Message, state: FSMContext) -> None:
     await _process_feedback(message, state, raw_text=text, source="voice")
 
 
+@router.message(GuestFlow.IN_INTERVIEW, Command("skip"))
+async def guest_skip_command(message: Message, state: FSMContext) -> None:
+    """/skip: advance index without writing to session_answers."""
+    data = await state.get_data()
+    idx = data["question_index"]
+    qids = data["question_ids"]
+    if idx >= len(qids):
+        return
+    await state.update_data(question_index=idx + 1)
+    await _ask_next_question(message, state)
+
+
 @router.message(GuestFlow.IN_INTERVIEW, F.text)
 async def guest_answer(message: Message, state: FSMContext) -> None:
     text = (message.text or "").strip()
@@ -147,6 +186,15 @@ async def guest_answer(message: Message, state: FSMContext) -> None:
     idx = data["question_index"]
     qids = data["question_ids"]
     q = data["questions_map"][qids[idx]]
+
+    # Non-text questions: гость прислал свободный текст вместо клика.
+    # `enum` с пустым enum_values рендерится как text-вопрос (fallback в keyboards.py),
+    # потому считаем его text-вопросом и здесь — обрабатываем как свободный ввод.
+    expected_type = q.get("expected_type")
+    is_text_like = expected_type == "text" or (expected_type == "enum" and not q.get("enum_values"))
+    if not is_text_like:
+        await message.answer("Пожалуйста, используйте кнопки выше или /skip.")
+        return
 
     async with ChatActionSender.typing(chat_id=message.chat.id, bot=message.bot):
         await append_session_message(sid, "user", text)
@@ -169,6 +217,83 @@ async def guest_answer(message: Message, state: FSMContext) -> None:
     )
     await state.update_data(answers=answers, question_index=idx + 1)
     await _ask_next_question(message, state)
+
+
+@router.callback_query(GuestFlow.IN_INTERVIEW, F.data.startswith("ans:"))
+async def guest_answer_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    """Handle inline-button answer for typed questions (boolean/number/enum) or skip."""
+    if callback.data is None or callback.message is None:
+        return
+    payload = callback.data.removeprefix("ans:")
+
+    data = await state.get_data()
+    idx = data["question_index"]
+    qids = data["question_ids"]
+
+    # Race: гость кликает по старой клавиатуре, индекс уже продвинут.
+    if idx >= len(qids):
+        await callback.answer("Этот вопрос уже завершён.", show_alert=False)
+        return
+
+    q = data["questions_map"][qids[idx]]
+    expected_type = q.get("expected_type")
+
+    # Снимаем клавиатуру у уже-отвеченного сообщения, чтобы не было повторных кликов.
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)  # type: ignore[union-attr]
+    except Exception:
+        # Если Telegram отказал (старое сообщение / уже без клавиатуры) — игнор.
+        pass
+
+    if payload == "skip":
+        await callback.answer("Пропущено.")
+        await state.update_data(question_index=idx + 1)
+        await _ask_next_question_from_callback(callback, state)
+        return
+
+    # Защита от click по callback на text-вопрос (теоретически не должно случиться,
+    # т.к. для text не рендерим клавиатуру) — fail closed.
+    if expected_type not in ("boolean", "number", "enum"):
+        await callback.answer("Ответьте текстом, пожалуйста.", show_alert=True)
+        return
+
+    try:
+        marked = _marked_value_from_callback(payload, expected_type)
+    except ValueError:
+        await callback.answer("Не понял ответ, попробуйте ещё раз.", show_alert=True)
+        return
+
+    sid = data["session_id"]
+    answer_text = _answer_text_from_callback(payload, expected_type)
+
+    await append_session_message(sid, "user", answer_text)
+    await save_answer_with_metric(
+        session_id=sid,
+        question_id=q["id"],
+        answer_text=answer_text,
+        marked_value=marked,
+    )
+
+    answers = list(data["answers"])
+    answers.append(
+        {
+            "question_text": q["text"],
+            "metric_key": q["metric_key"],
+            "answer_text": answer_text,
+            "marked_value": marked,
+        }
+    )
+    await state.update_data(answers=answers, question_index=idx + 1)
+    await callback.answer()
+    await _ask_next_question_from_callback(callback, state)
+
+
+async def _ask_next_question_from_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    """Bridge: _ask_next_question expects a Message; CallbackQuery carries one."""
+    msg = callback.message
+    if msg is None:
+        return
+    await _ask_next_question(msg, state)  # type: ignore[arg-type]
 
 
 async def _finalize_with_state(message: Message, state: FSMContext) -> None:
