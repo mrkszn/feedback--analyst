@@ -132,13 +132,32 @@ on_exit() {
 }
 trap on_exit EXIT INT TERM
 
+# --- Resolve timeout binary (macOS: gtimeout from coreutils; Linux: timeout) ---
+# Если ни того, ни другого нет — работаем БЕЗ wall-clock cap, полагаясь на claude --max-turns.
+TIMEOUT_BIN=""
+TIMEOUT_ARGS=""
+if command -v timeout >/dev/null 2>&1; then
+    TIMEOUT_BIN="timeout"
+elif command -v gtimeout >/dev/null 2>&1; then
+    TIMEOUT_BIN="gtimeout"
+else
+    echo ">>> [autonomous] WARNING: ни timeout, ни gtimeout не найден."
+    echo ">>> [autonomous]   Install: brew install coreutils (даст gtimeout)"
+    echo ">>> [autonomous]   Сейчас работаем БЕЗ wall-clock cap, только --max-turns."
+fi
+
 # --- Run claude ---
 case "$MODE" in
     --headless)
         : "${PROMPT_FILE:?PROMPT_FILE must be set}"
         : "${LOG_FILE:?LOG_FILE must be set}"
-        echo ">>> [autonomous] стартую headless claude -p (hard timeout 2h15m, max-turns 800)"
-        timeout --kill-after=10m 2h15m \
+        if [[ -n "$TIMEOUT_BIN" ]]; then
+            TIMEOUT_ARGS="--kill-after=10m 2h15m"
+            echo ">>> [autonomous] headless claude -p ($TIMEOUT_BIN $TIMEOUT_ARGS, max-turns 800)"
+        else
+            echo ">>> [autonomous] headless claude -p (без timeout, max-turns 800)"
+        fi
+        $TIMEOUT_BIN $TIMEOUT_ARGS \
             claude -p "$(cat "$PROMPT_FILE")" \
                 --permission-mode dontAsk \
                 --max-turns 800 \
@@ -147,8 +166,13 @@ case "$MODE" in
     --smoke)
         : "${PROMPT_FILE:?PROMPT_FILE must be set}"
         : "${LOG_FILE:?LOG_FILE must be set}"
-        echo ">>> [smoke] стартую headless claude -p (hard timeout 6m, max-turns 30)"
-        timeout --kill-after=1m 6m \
+        if [[ -n "$TIMEOUT_BIN" ]]; then
+            TIMEOUT_ARGS="--kill-after=1m 6m"
+            echo ">>> [smoke] claude -p ($TIMEOUT_BIN $TIMEOUT_ARGS, max-turns 30)"
+        else
+            echo ">>> [smoke] claude -p (без timeout, max-turns 30)"
+        fi
+        $TIMEOUT_BIN $TIMEOUT_ARGS \
             claude -p "$(cat "$PROMPT_FILE")" \
                 --permission-mode dontAsk \
                 --max-turns 30 \
@@ -157,6 +181,7 @@ case "$MODE" in
     --interactive)
         echo ">>> [autonomous] стартую интерактивный claude (dontAsk mode)"
         # Промт вставит outer-скрипт через tmux paste-buffer после `sleep 5`
+        # wall-clock cap у interactive нет — рассчитываем на self-discipline из промта
         claude --permission-mode dontAsk
         ;;
     *)
