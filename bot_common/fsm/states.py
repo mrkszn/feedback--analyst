@@ -12,3 +12,6 @@ class AdminFlow(StatesGroup):
     AWAITING_QUESTION_TEXT = State()
     AWAITING_QUESTION_METRIC = State()
     AWAITING_QUESTION_EDIT = State()
+    AWAITING_QUESTION_COUNT = State()
+    AWAITING_QUESTION_VOICE = State()
+    AWAITING_DRAFT_EDIT = State()
