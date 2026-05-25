@@ -21,13 +21,24 @@ set -euo pipefail
 MODE="${1:-}"
 if [[ "$MODE" != "--headless" && "$MODE" != "--interactive" && "$MODE" != "--smoke" && "$MODE" != "--phase-2a" ]]; then
     cat <<EOF
-Usage: $0 [--interactive | --headless | --smoke | --phase-2a]
-  --interactive  → 2h автономной сессии (generic v1 промт), в tmux
-  --headless     → 2h автономной сессии через claude -p, выходит после отчёта
-  --smoke        → короткий wet-run (5 мин) для проверки инфры
-  --phase-2a     → Phase 2A: orchestrator-промт для 4 команд (Admin Conversational MVP)
+Usage: $0 <mode> [--resume <branch>]
+  mode:
+    --interactive  → 2h автономной сессии (generic v1 промт), в tmux
+    --headless     → 2h автономной сессии через claude -p, выходит после отчёта
+    --smoke        → короткий wet-run (5 мин) для проверки инфры
+    --phase-2a     → Phase 2A: orchestrator-промт (4 команды Admin Conversational MVP)
+  --resume <branch> (опционально):
+    Продолжить работу на существующей autonomous/* ветке (например, после
+    permission-denial во время прошлой сессии). НЕ создаёт новый tag/branch.
 EOF
     exit 1
+fi
+
+# Опциональный --resume <branch>
+RESUME_BRANCH=""
+if [[ "${2:-}" == "--resume" ]]; then
+    RESUME_BRANCH="${3:-}"
+    [[ -n "$RESUME_BRANCH" ]] || { echo "ERROR: --resume требует <branch> аргумент"; exit 1; }
 fi
 
 PROJECT_ROOT="/Users/markdekker/Desktop/Need eat bot/telegram-waiter"
@@ -73,13 +84,6 @@ if ! git diff-index --quiet HEAD -- || [[ -n "$(git ls-files --others --exclude-
     exit 1
 fi
 
-CURRENT_BRANCH=$(git branch --show-current)
-if [[ "$CURRENT_BRANCH" != "main" ]]; then
-    echo "ERROR: ты сейчас на ветке '$CURRENT_BRANCH', а нужна main."
-    echo "Переключись и попробуй снова: git checkout main"
-    exit 1
-fi
-
 # --- Settings bak check ---
 if [[ -f ".claude/settings.local.json.session-bak" ]]; then
     echo "ERROR: settings.local.json.session-bak существует — прошлая сессия не восстановила permissions."
@@ -88,28 +92,67 @@ if [[ -f ".claude/settings.local.json.session-bak" ]]; then
     exit 1
 fi
 
-# --- Создать checkpoint и isolation-ветку ---
-SESSION_TS=$(date +%Y%m%d-%H%M)
-PRE_TAG="pre-autonomous-$SESSION_TS"
-AUTO_BRANCH="autonomous/$SESSION_TS"
+CURRENT_BRANCH=$(git branch --show-current)
 
-# Если случайный тег уже есть (запускали два раза в одну минуту) — отказ
-if git rev-parse "$PRE_TAG" >/dev/null 2>&1; then
-    echo "ERROR: тег '$PRE_TAG' уже существует. Подожди минуту или удали вручную."
-    exit 1
+if [[ -n "$RESUME_BRANCH" ]]; then
+    # --- RESUME-режим: продолжить на существующей ветке ---
+    if ! git show-ref --verify --quiet "refs/heads/$RESUME_BRANCH"; then
+        echo "ERROR: ветка '$RESUME_BRANCH' не существует."
+        exit 1
+    fi
+    if [[ "$RESUME_BRANCH" != autonomous/* ]]; then
+        echo "WARN: --resume ожидает ветку вида 'autonomous/<TS>', получено '$RESUME_BRANCH'."
+        echo "      Продолжаю, но будь внимателен."
+    fi
+    if [[ "$CURRENT_BRANCH" != "$RESUME_BRANCH" ]]; then
+        git checkout "$RESUME_BRANCH"
+    fi
+    AUTO_BRANCH="$RESUME_BRANCH"
+    # Используем существующий pre-tag, если такой есть; иначе пусто.
+    SESSION_TS_FROM_BRANCH="${RESUME_BRANCH#autonomous/}"
+    PRE_TAG="pre-autonomous-$SESSION_TS_FROM_BRANCH"
+    if ! git rev-parse "$PRE_TAG" >/dev/null 2>&1; then
+        echo "WARN: tag '$PRE_TAG' не найден; recovery-точки от старта прошлой сессии нет."
+        PRE_TAG="(none)"
+    fi
+    SESSION_TS="$SESSION_TS_FROM_BRANCH"
+    echo
+    echo ">>> RESUME mode:"
+    echo ">>>   branch:  $AUTO_BRANCH (продолжаем работу на ней)"
+    echo ">>>   pre-tag: $PRE_TAG"
+    echo ">>>   commits на ветке сверх main:"
+    git log main.."$AUTO_BRANCH" --oneline | sed 's/^/         /'
+else
+    # --- Обычный режим: новый checkpoint и isolation-ветка ---
+    if [[ "$CURRENT_BRANCH" != "main" ]]; then
+        echo "ERROR: ты сейчас на ветке '$CURRENT_BRANCH', а нужна main."
+        echo "Переключись и попробуй снова: git checkout main"
+        echo "Если хочешь продолжить прошлую сессию: $0 $MODE --resume <branch>"
+        exit 1
+    fi
+
+    SESSION_TS=$(date +%Y%m%d-%H%M)
+    PRE_TAG="pre-autonomous-$SESSION_TS"
+    AUTO_BRANCH="autonomous/$SESSION_TS"
+
+    if git rev-parse "$PRE_TAG" >/dev/null 2>&1; then
+        echo "ERROR: тег '$PRE_TAG' уже существует. Подожди минуту или удали вручную."
+        exit 1
+    fi
+    if git show-ref --verify --quiet "refs/heads/$AUTO_BRANCH"; then
+        echo "ERROR: ветка '$AUTO_BRANCH' уже существует. Подожди минуту или удали вручную."
+        exit 1
+    fi
+
+    git tag "$PRE_TAG"
+    git checkout -b "$AUTO_BRANCH"
+
+    echo
+    echo ">>> Pre-session checkpoint:"
+    echo ">>>   tag:    $PRE_TAG  (на main)"
+    echo ">>>   branch: $AUTO_BRANCH  (текущая; на ней будут коммиты claude'а)"
 fi
-if git show-ref --verify --quiet "refs/heads/$AUTO_BRANCH"; then
-    echo "ERROR: ветка '$AUTO_BRANCH' уже существует. Подожди минуту или удали вручную."
-    exit 1
-fi
 
-git tag "$PRE_TAG"
-git checkout -b "$AUTO_BRANCH"
-
-echo
-echo ">>> Pre-session checkpoint:"
-echo ">>>   tag:    $PRE_TAG  (на main)"
-echo ">>>   branch: $AUTO_BRANCH  (текущая; на ней будут коммиты claude'а)"
 
 # --- Собрать session-aware промт (static + dynamic context) ---
 LOG_DIR="$PROJECT_ROOT/runs"

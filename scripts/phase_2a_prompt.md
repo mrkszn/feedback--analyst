@@ -46,12 +46,25 @@
 
 См. план §«Команда #4». Reward tiers + issued_rewards + admin CRUD + /redeem. Содержит миграцию 0003 — применяется через `mcp__supabase__apply_migration`, **запросит подтверждение user'а** (это by design, не пытайся обойти). 5 атомарных коммитов.
 
-## Между командами
+## Между командами — обязательная последовательность teardown
 
-После каждой:
-1. `cd telegram-waiter && uv run ruff check . && uv run mypy . && uv run pytest -q` — всё зелёное
-2. `git log main..HEAD --oneline` — видеть commits только что закончившейся команды
-3. Только тогда `TeamCreate({team_name: "fn-<next-slug>"})` следующей
+🚨 **Один parent-агент = одна active team одновременно.** После завершения команды N **обязательно**:
+
+1. Дождись idle всех members команды N (team-lead, implementer, tester, reviewer).
+2. **`TeamDelete({team_name: "fn-<slug-команды-N>"})`** — освобождает team-slot. Без этого `TeamCreate` команды N+1 даст ошибку «Already leading team». Урок autonomous session 20260525-1621.
+3. Локальная верификация: `uv run ruff check . && uv run mypy . && uv run pytest -q` — всё зелёное.
+4. `git log main..HEAD --oneline` — видеть commits только что закончившейся команды (от team-lead'а N).
+5. Только тогда `TeamCreate({team_name: "fn-<slug-команды-N+1>"})` следующей.
+
+**Паттерн строго:** `TeamDelete` → verify → `TeamCreate`. Не сокращай.
+
+## Bash в этой сессии
+
+В `Bash` **избегай compound-команд с `cd`**: например `cd /path && grep ...` фейлится в `dontAsk` mode (исторически `cd` отсутствовал в allowlist; сейчас добавлен, но безопаснее всё равно использовать абсолютные пути):
+
+✅ `grep -n "pattern" /Users/markdekker/Desktop/Need\ eat\ bot/telegram-waiter/path/file | head -80`
+✅ `find /Users/markdekker/Desktop/Need\ eat\ bot/telegram-waiter -name "*.py" | head -20`
+❌ `cd /Users/.../telegram-waiter && grep ... | head ...`
 
 ## Спавн команды (паттерн)
 
