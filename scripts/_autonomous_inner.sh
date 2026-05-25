@@ -104,6 +104,26 @@ echo ">>> [autonomous] бэкап: $SETTINGS_BAK"
 echo ">>> [autonomous] git branch: ${SESSION_BRANCH:-?}"
 echo ">>> [autonomous] pre-tag:    ${PRE_TAG:-?}"
 
+# --- Verify: критичные permissions доступны (защита от регрессии swap-логики) ---
+# Если что-то пошло не так на swap — лучше упасть СЕЙЧАС, а не на середине сессии
+# когда команды агентов натыкаются на permission denied на каждый commit.
+_check_perm() {
+    local perm="$1"
+    if ! jq -e --arg p "$perm" '.permissions.allow | index($p)' "$SETTINGS" >/dev/null; then
+        echo "FATAL: '$perm' отсутствует в allow после swap. Восстанавливаю настройки."
+        mv "$SETTINGS_BAK" "$SETTINGS"
+        exit 1
+    fi
+    if jq -e --arg p "$perm" '.permissions.ask // [] | index($p)' "$SETTINGS" >/dev/null; then
+        echo "FATAL: '$perm' остался в ask после swap (в dontAsk это hard-deny!). Восстанавливаю."
+        mv "$SETTINGS_BAK" "$SETTINGS"
+        exit 1
+    fi
+}
+_check_perm "Bash(git commit:*)"
+_check_perm "Bash(git add:*)"
+echo ">>> [autonomous] verify: Bash(git commit:*) ✓ allow, ✗ ask — team-lead'ы смогут коммитить в feature-branch"
+
 # --- Backup ~/.claude/ для защиты от случайных правок globals ---
 GLOBAL_CLAUDE_BAK=""
 if [[ -d "$HOME/.claude" ]]; then

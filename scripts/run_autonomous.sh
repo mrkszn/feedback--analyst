@@ -19,22 +19,32 @@
 set -euo pipefail
 
 MODE="${1:-}"
-if [[ "$MODE" != "--headless" && "$MODE" != "--interactive" && "$MODE" != "--smoke" ]]; then
+if [[ "$MODE" != "--headless" && "$MODE" != "--interactive" && "$MODE" != "--smoke" && "$MODE" != "--phase-2a" ]]; then
     cat <<EOF
-Usage: $0 [--headless | --interactive | --smoke]
-  --interactive  → 2h автономной сессии в tmux, после отчёта ждёт указаний
+Usage: $0 [--interactive | --headless | --smoke | --phase-2a]
+  --interactive  → 2h автономной сессии (generic v1 промт), в tmux
   --headless     → 2h автономной сессии через claude -p, выходит после отчёта
   --smoke        → короткий wet-run (5 мин) для проверки инфры
+  --phase-2a     → Phase 2A: orchestrator-промт для 4 команд (Admin Conversational MVP)
 EOF
     exit 1
 fi
 
 PROJECT_ROOT="/Users/markdekker/Desktop/Need eat bot/telegram-waiter"
-if [[ "$MODE" == "--smoke" ]]; then
-    PROMPT_FILE="$PROJECT_ROOT/scripts/_smoke_prompt.md"
-else
-    PROMPT_FILE="$PROJECT_ROOT/scripts/autonomous_session.md"
-fi
+case "$MODE" in
+    --smoke)
+        PROMPT_FILE="$PROJECT_ROOT/scripts/_smoke_prompt.md"
+        ;;
+    --phase-2a)
+        PROMPT_FILE="$PROJECT_ROOT/scripts/phase_2a_prompt.md"
+        # Phase 2A — это interactive по природе (4 команды + wind-down + ожидание).
+        # Внутрь inner.sh летит MODE=--interactive, чтобы там сработала ветка claude (не -p).
+        MODE="--interactive"
+        ;;
+    *)
+        PROMPT_FILE="$PROJECT_ROOT/scripts/autonomous_session.md"
+        ;;
+esac
 INNER_SCRIPT="$PROJECT_ROOT/scripts/_autonomous_inner.sh"
 SESSION="waiter-auto"
 
