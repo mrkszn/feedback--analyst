@@ -2,6 +2,7 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
+from aiogram.utils.chat_action import ChatActionSender
 
 from agent.nodes.analyze import analyze_feedback
 from agent.nodes.card import build_client_card
@@ -34,27 +35,50 @@ async def _process_feedback(
     source: str,
 ) -> None:
     user = message.from_user
-    if user is None:
+    bot = message.bot
+    if user is None or bot is None:
         return
 
-    client = await create_or_get_client(telegram_id=user.id, name=user.full_name)
-    session_id = await start_session(client_id=client["telegram_id"])
-    await state.update_data(session_id=str(session_id), client_id=client["telegram_id"])
+    # Typing-индикатор работает, пока выполняется тяжёлый блок ниже
+    # (LLM analyze + DB writes + LLM select). Telegram продлевает «typing…»
+    # каждые ~5 сек автоматически.
+    async with ChatActionSender.typing(chat_id=message.chat.id, bot=bot):
+        client = await create_or_get_client(telegram_id=user.id, name=user.full_name)
+        session_id = await start_session(client_id=client["telegram_id"])
+        await state.update_data(session_id=str(session_id), client_id=client["telegram_id"])
 
-    await append_session_message(session_id, "user", raw_text)
+        await append_session_message(session_id, "user", raw_text)
 
-    summary = await analyze_feedback(raw_text)
-    await save_feedback_summary(
-        session_id,
-        raw_text=raw_text,
-        source=source,  # type: ignore[arg-type]
-        summary=summary.model_dump(),  # type: ignore[arg-type]
-    )
+        summary = await analyze_feedback(raw_text)
+        await save_feedback_summary(
+            session_id,
+            raw_text=raw_text,
+            source=source,  # type: ignore[arg-type]
+            summary=summary.model_dump(),  # type: ignore[arg-type]
+        )
 
-    pool = await get_active_questions()
-    selected = await select_adaptive_questions(summary, pool)
+        pool = await get_active_questions()
+        selected = await select_adaptive_questions(summary, pool)
 
     if not selected.question_ids:
+        # Пул вопросов пуст ИЛИ селектор не выбрал ни одного.
+        # Не молчим — даём пользователю явный сигнал и закрываем сессию
+        # без интервью (но summary уже сохранён в Supabase).
+        # TODO: в будущей итерации — синтезировать ad-hoc вопросы через LLM,
+        # если pool пуст и admin ещё ничего не настроил.
+        if not pool:
+            await message.answer(
+                "Спасибо за отзыв — я его сохранил и передам владельцу. "
+                "Уточняющих вопросов пока нет: владелец их ещё не настроил "
+                "через админ-бота. Хорошего дня!"
+            )
+        else:
+            await message.answer(
+                "Спасибо, отзыв сохранён. Уточняющих вопросов под этот "
+                "контекст у меня нет. Хорошего дня!"
+            )
+        # Финалайз молча — прощание мы уже отправили выше.
+        await state.update_data(finalize_message_sent=True)
         await _finalize_session(message, state, summary=summary, answers=[])
         return
 
@@ -95,16 +119,18 @@ async def guest_feedback_text(message: Message, state: FSMContext) -> None:
 @router.message(GuestFlow.AWAITING_FEEDBACK, F.voice)
 async def guest_feedback_voice(message: Message, state: FSMContext) -> None:
     voice = message.voice
-    if voice is None or message.bot is None:
+    bot = message.bot
+    if voice is None or bot is None:
         return
-    path = await download_voice_to_tmp(voice.file_id, message.bot)
-    try:
-        text = await transcribe_voice(path)
-    finally:
+    async with ChatActionSender.typing(chat_id=message.chat.id, bot=bot):
+        path = await download_voice_to_tmp(voice.file_id, bot)
         try:
-            path.unlink(missing_ok=True)
-        except OSError:
-            pass
+            text = await transcribe_voice(path)
+        finally:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
     if not text.strip():
         await message.answer("Не удалось разобрать голос. Можете отправить текстом?")
         return
@@ -114,7 +140,7 @@ async def guest_feedback_voice(message: Message, state: FSMContext) -> None:
 @router.message(GuestFlow.IN_INTERVIEW, F.text)
 async def guest_answer(message: Message, state: FSMContext) -> None:
     text = (message.text or "").strip()
-    if not text:
+    if not text or message.bot is None:
         return
     data = await state.get_data()
     sid = data["session_id"]
@@ -122,14 +148,15 @@ async def guest_answer(message: Message, state: FSMContext) -> None:
     qids = data["question_ids"]
     q = data["questions_map"][qids[idx]]
 
-    await append_session_message(sid, "user", text)
-    marked = await extract_metric_from_answer(question=q, answer_text=text)
-    await save_answer_with_metric(
-        session_id=sid,
-        question_id=q["id"],
-        answer_text=text,
-        marked_value=marked,
-    )
+    async with ChatActionSender.typing(chat_id=message.chat.id, bot=message.bot):
+        await append_session_message(sid, "user", text)
+        marked = await extract_metric_from_answer(question=q, answer_text=text)
+        await save_answer_with_metric(
+            session_id=sid,
+            question_id=q["id"],
+            answer_text=text,
+            marked_value=marked,
+        )
 
     answers = list(data["answers"])
     answers.append(
@@ -163,26 +190,51 @@ async def _finalize_session(
     data = await state.get_data()
     session_id = data["session_id"]
     client_id = data["client_id"]
+    bot = message.bot
 
     await state.set_state(GuestFlow.FINALIZING)
-    card = await build_client_card(feedback_summary=summary, answers=answers)
-    vector = await embed_text(card.summary_text)
-    vector_id = await upsert_client_card_vector(
-        session_id=session_id,
-        client_id=client_id,
-        vector=vector,
-        sentiment=card.sentiment,
-        topics=card.topics,
-    )
-    await save_client_card(
-        client_id=client_id,
-        session_id=session_id,
-        summary_text=card.summary_text,
-        pinecone_vector_id=vector_id,
-    )
-    await end_session(session_id)
+
+    # Build card + embed + Pinecone upsert — ещё один долгий блок.
+    if bot is not None:
+        async with ChatActionSender.typing(chat_id=message.chat.id, bot=bot):
+            card = await build_client_card(feedback_summary=summary, answers=answers)
+            vector = await embed_text(card.summary_text)
+            vector_id = await upsert_client_card_vector(
+                session_id=session_id,
+                client_id=client_id,
+                vector=vector,
+                sentiment=card.sentiment,
+                topics=card.topics,
+            )
+            await save_client_card(
+                client_id=client_id,
+                session_id=session_id,
+                summary_text=card.summary_text,
+                pinecone_vector_id=vector_id,
+            )
+            await end_session(session_id)
+    else:
+        card = await build_client_card(feedback_summary=summary, answers=answers)
+        vector = await embed_text(card.summary_text)
+        vector_id = await upsert_client_card_vector(
+            session_id=session_id,
+            client_id=client_id,
+            vector=vector,
+            sentiment=card.sentiment,
+            topics=card.topics,
+        )
+        await save_client_card(
+            client_id=client_id,
+            session_id=session_id,
+            summary_text=card.summary_text,
+            pinecone_vector_id=vector_id,
+        )
+        await end_session(session_id)
+
     await state.clear()
-    await message.answer("Спасибо за отзыв! Хорошего дня.")
+    # Если ранее уже отправили finalize-сообщение (empty-pool case) — не дублируем.
+    if not data.get("finalize_message_sent"):
+        await message.answer("Спасибо за отзыв! Хорошего дня.")
 
 
 @router.message(Command("cancel"))
