@@ -1,3 +1,5 @@
+import json
+
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -6,10 +8,11 @@ from aiogram.utils.chat_action import ChatActionSender
 
 from agent.nodes.analyze import analyze_feedback
 from agent.nodes.card import build_client_card
+from agent.nodes.dialogue import continue_dialogue
 from agent.nodes.extract import extract_metric_from_answer
-from agent.nodes.select import select_adaptive_questions
 from bot_common.fsm.states import GuestFlow
 from bot_guest.keyboards import build_question_keyboard
+from config import settings
 from integrations.openai_embed import embed_text
 from integrations.pinecone import upsert_client_card_vector
 from integrations.whisper import transcribe_voice
@@ -22,7 +25,6 @@ from services.sessions import (
 )
 from tools.answers import save_answer_with_metric
 from tools.client_cards import save_client_card
-from tools.questions import get_active_questions
 from utils.voice_download import download_voice_to_tmp
 
 router = Router(name="guest_feedback")
@@ -58,40 +60,42 @@ async def _process_feedback(
             summary=summary.model_dump(),  # type: ignore[arg-type]
         )
 
-        pool = await get_active_questions()
-        selected = await select_adaptive_questions(summary, pool)
+        # Persist summary dict under both keys for downstream compat
+        # (`survey_consent` reads `feedback_summary`; legacy `_finalize_with_state`
+        # reads `summary`).
+        summary_dict = summary.model_dump()
+        feedback_summary_json = json.dumps(summary_dict, ensure_ascii=False)
 
-    if not selected.question_ids:
-        # Пул вопросов пуст ИЛИ селектор не выбрал ни одного.
-        # Не молчим — даём пользователю явный сигнал и закрываем сессию
-        # без интервью (но summary уже сохранён в Supabase).
-        # TODO: в будущей итерации — синтезировать ad-hoc вопросы через LLM,
-        # если pool пуст и admin ещё ничего не настроил.
-        if not pool:
-            await message.answer(
-                "Спасибо за отзыв — я его сохранил и передам владельцу. "
-                "Уточняющих вопросов пока нет: владелец их ещё не настроил "
-                "через админ-бота. Хорошего дня!"
-            )
-        else:
-            await message.answer(
-                "Спасибо, отзыв сохранён. Уточняющих вопросов под этот "
-                "контекст у меня нет. Хорошего дня!"
-            )
-        # Финалайз молча — прощание мы уже отправили выше.
-        await state.update_data(finalize_message_sent=True)
-        await _finalize_session(message, state, summary=summary, answers=[])
-        return
+        await state.update_data(
+            history=[],
+            turn_count=0,
+            running_context={},
+            feedback_summary=summary_dict,
+            summary=summary_dict,
+            answers=[],
+        )
 
-    await state.update_data(
-        question_ids=selected.question_ids,
-        question_index=0,
-        questions_map={str(q["id"]): q for q in pool},
-        summary=summary.model_dump(),
-        answers=[],
+        # First bot turn — empathic reaction + organic clarifying question.
+        first_turn = await continue_dialogue(
+            feedback_summary=feedback_summary_json,
+            history=[],
+            restaurant_context=settings.restaurant_context,
+            turn_count=0,
+            max_turns=5,
+        )
+
+    # End of typing-indicator block. Persist bot turn + send.
+    await append_session_message(
+        session_id,
+        "bot",
+        first_turn.bot_reply,
     )
-    await state.set_state(GuestFlow.IN_INTERVIEW)
-    await _ask_next_question(message, state)
+    await state.update_data(
+        history=[{"role": "bot", "content": first_turn.bot_reply}],
+        turn_count=0,  # User hasn't replied yet
+    )
+    await state.set_state(GuestFlow.IN_DIALOGUE)
+    await message.answer(first_turn.bot_reply)
 
 
 async def _ask_next_question(message: Message, state: FSMContext) -> None:

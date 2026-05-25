@@ -4,7 +4,7 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from bot_guest.handlers import feedback, start
+from bot_guest.handlers import dialogue, feedback, start, survey_consent
 from config import settings
 
 
@@ -17,6 +17,8 @@ async def main() -> None:
     dp = Dispatcher(storage=MemoryStorage())
     dp.include_router(start.router)
     dp.include_router(feedback.router)
+    dp.include_router(dialogue.router)
+    dp.include_router(survey_consent.router)
 
     await dp.start_polling(bot)
 
