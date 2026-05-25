@@ -43,8 +43,8 @@ async def _process_feedback(
         return
 
     # Typing-индикатор работает, пока выполняется тяжёлый блок ниже
-    # (LLM analyze + DB writes + LLM select). Telegram продлевает «typing…»
-    # каждые ~5 сек автоматически.
+    # (LLM analyze + DB writes + первый LLM-турн диалога). Telegram продлевает
+    # «typing…» каждые ~5 сек автоматически.
     async with ChatActionSender.typing(chat_id=message.chat.id, bot=bot):
         client = await create_or_get_client(telegram_id=user.id, name=user.full_name)
         session_id = await start_session(client_id=client["telegram_id"])
