@@ -3,6 +3,8 @@ from aiogram.fsm.state import State, StatesGroup
 
 class GuestFlow(StatesGroup):
     AWAITING_FEEDBACK = State()
+    IN_DIALOGUE = State()
+    AWAITING_SURVEY_CONSENT = State()
     IN_INTERVIEW = State()
     FINALIZING = State()
 
