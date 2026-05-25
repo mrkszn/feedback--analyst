@@ -7,18 +7,30 @@
 1. `/Users/markdekker/.claude/plans/imperative-stirring-dove.md` — секция «Этап 2A» (4 команды) + общие правила (Шаблоны команд T1/T2, Промпты ролей, GIT.md ритм коммитов)
 2. `docs/GIT.md` — формат коммитов (Conventional Commits, ≤72 заголовок, **1 функция = 1 коммит** — §4)
 3. `.claude/settings.local.json` — текущие permissions (помни: `ask` = fail в dontAsk; ты НЕ редактируешь этот файл, launcher уже расширил allowlist; верификация в логе подтвердила что `Bash(git commit:*)` доступен)
-4. `current_changes.md` — урок прошлой autonomous сессии про 33 функции без коммитов
+4. **`current_changes.md`** — **source of truth текущего state работы.** Содержит уроки прошлых сессий + (если запуск через `--resume`) разбор: что закончено N/4, какая команда partial и на каком commit, что было потеряно, рекомендуемый starting point.
 
 После reads:
-- `git branch --show-current` → должна быть `autonomous/<TS>` (isolation branch, создана launcher'ом). Если main — **СТОП**, запиши blocker, попроси юзера.
+- `git branch --show-current` → должна быть `autonomous/<TS>` (isolation branch, создана launcher'ом ИЛИ переиспользована через `--resume`). Если main — **СТОП**, запиши blocker, попроси юзера.
+- `git log main..HEAD --oneline --reverse` → видишь commit history ветки. Если `current_changes.md` упоминает commits с теми же SHA — **эти команды уже сделаны, не пытайся переделывать**.
 - Capture `START_TS=$(date +%s)` в scratchpad.
+
+### Resume-режим: определи starting point
+
+Если `git log main..HEAD --oneline` показывает уже сделанные коммиты от прошлой сессии (по нашему плану 4 команды → до 15 коммитов от orchestrator'а):
+
+1. Сверь commits с `current_changes.md` секцией «What landed».
+2. **Стартовая точка** = первая команда/шаг, который **не** упомянут в «What landed» как ✓.
+3. **НЕ перезапускай уже-сделанные команды.** Пример: если `current_changes.md` говорит «Cmd #1 ✓ (1 commit) + Cmd #2 ✓ (6 commits) + Cmd #3 partial (1/3)», твоя точка старта — Cmd #3 commit 2 (callback handler).
+4. **Lost WIP**: если current_changes говорит «Lost / not committed: <X>», восстанавливай только спецификацию из плана. Не пытайся достать через reflog (там нет) или .pyc (тоже мусор).
 
 ## Time budget
 
 - **Старт:** NOW
-- **Soft deadline:** START + 1h 45m — после этого никаких новых TeamCreate, входи в wind-down
+- **Soft deadline:** START + 1h 45m — после этого **никаких новых TeamCreate**, входи в wind-down
 - **Hard deadline:** START + 2h
 - Проверяй `elapsed=$(date +%s) - START_TS` перед каждой новой командой
+
+🚨 **Soft-deadline gate — жёстко** (урок 20260525-1621): прошлый orchestrator проигнорировал soft deadline и продолжил спавнить команды. Harness внутри «съел» ~1h45m wall-time молча (timestamps в tool-output скакнули с 15:42 на 17:27 без сигнала). orchestrator пришёл в себя на 2h24m, паника, потеря WIP. **Не запускай новую команду если `elapsed >= 1h45m`** — даже если кажется что прогресс быстрый. Лучше закончить N команд чисто, чем потерять N+1 в wind-down.
 
 ## Жёсткое правило коммитов
 
@@ -105,14 +117,20 @@ Matcher Claude Code НЕ разбирает compound через `;`, `&&`, `|`, 
 
 ## Спавн команды (паттерн)
 
+🚨 **NAMING — НЕ используй `team-lead` как имя subagent'а** (урок 20260525-1621): TeamCreate резервирует литеральное имя `team-lead` для parent-orchestrator'а (то есть тебя). Если ты спавнишь Agent с `name: "team-lead"`, harness переименовывает его в `team-lead-2`, и **все промпты для ролей** (где написано «team-lead коммитит / SendMessage тимлиду / ...») начинают ссылаться на несуществующий контекст. Прошлый orchestrator потратил ~30 сек на каждую команду чтобы разруливать live через DM.
+
+**Используй `lead` (или `coord`) — не `team-lead`:**
+
 ```
 TeamCreate({team_name: "fn-<slug>", agent_type: "claude", description: "Imp <FN>"})
 
-Agent({team_name: "fn-<slug>", name: "team-lead",   subagent_type: "claude",         prompt: <role 'team-lead' из плана с подстановкой {FN}, {MD_PATH}>})
+Agent({team_name: "fn-<slug>", name: "lead",        subagent_type: "claude",         prompt: <role 'lead' из плана §«Промпты ролей»>})
 Agent({team_name: "fn-<slug>", name: "implementer", subagent_type: "general-purpose", prompt: <role 'implementer'>})
 Agent({team_name: "fn-<slug>", name: "tester",      subagent_type: "general-purpose", prompt: <role 'tester'>})
 Agent({team_name: "fn-<slug>", name: "reviewer",    subagent_type: "Explore",         prompt: <role 'reviewer'>})
 ```
+
+**Подстановка в промпты:** где в плане упоминается «team-lead» — читай и подставляй как `lead`. SendMessage `to: "lead"`, не `to: "team-lead"`. Это касается только имени subagent'а в TeamCreate, не названия роли в документах.
 
 Промпты ролей — в плане, секция «Промпты ролей».
 
@@ -120,11 +138,25 @@ Agent({team_name: "fn-<slug>", name: "reviewer",    subagent_type: "Explore",   
 
 ## Wind-down (за 15 мин до hard deadline)
 
-1. Активным team-lead'ам: `SendMessage` «wind-down: дозакончи текущий шаг, новых задач не бери».
-2. Обнови / создай `current_changes.md` в корне `telegram-waiter/` с финальным отчётом по Phase 2A (формат — как у прошлой сессии: что закончено N/4, blocked, decisions, outstanding questions, next milestone).
-3. `git add current_changes.md && git commit -m "docs: Phase 2A autonomous session — <N>/4 commands completed"`
-4. **Push НЕ делай** — это человек.
-5. Финальный отчёт в stdout:
+🚨 **NEVER discard untracked WIP** (урок 20260525-1621): прошлый team-lead в wind-down получил инструкцию «commit if green / drop if red» и **сбросил готовую работу** (`guest_answer_callback` + тесты, 168 passing tests включая новый файл) через `git restore` + `rm`, потому что прочитал «if red» вместо «if green». Recovery был невозможен — work лежал только как untracked.
+
+**Правило:** в wind-down **сначала смотрим состояние**, потом действуем. Шаги в этом порядке:
+
+1. Активным `lead`'ам отправь `SendMessage`:
+   ```
+   wind-down: НЕ удаляй и НЕ git restore ничего из working tree.
+   Если есть WIP — закоммить как есть (даже если не финальный) с
+   маркером "wip(<group>): <description>".
+   Дальше — отчитайся orchestrator'у и переходи в idle.
+   ```
+2. Перед любым `git restore` / `rm` — **обязательно**:
+   - `git status -uall` (full report включая untracked)
+   - `git diff --stat` (что в модификациях)
+   - Если есть untracked файлы или зелёные тесты на WIP → **закоммитить wip-коммитом**, не сбрасывать
+3. Обнови / создай `current_changes.md` в корне `telegram-waiter/` с финальным отчётом по Phase 2A (формат — как у прошлой сессии: что закончено N/4, blocked, decisions, outstanding questions, next milestone).
+4. `git add current_changes.md && git commit -m "docs: Phase 2A autonomous session — <N>/4 commands completed"`
+5. **Push НЕ делай** — это человек.
+6. Финальный отчёт в stdout:
 
 ```
 ============================================================
