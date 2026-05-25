@@ -1,9 +1,14 @@
 import asyncio
 
-from aiogram import Router
+from aiogram import F, Router
 from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 
 from bot_common.fsm.states import AdminFlow
 from db.client import get_supabase
@@ -43,16 +48,37 @@ async def admin_questions_list(message: Message) -> None:
     await message.answer("\n".join(lines))
 
 
+_ADD_QUESTION_TEXT_PROMPT = (
+    "Отправьте текст вопроса в формате:\n"
+    "<metric_key>|<expected_type>|<text>[|enum1,enum2,...]\n"
+    "Пример: service_speed|number|Оцените скорость обслуживания от 1 до 5"
+)
+
+
 @router.message(Command("add_question"))
 async def admin_question_add(message: Message, state: FSMContext) -> None:
     if not await require_admin(message):
         return
-    await state.set_state(AdminFlow.AWAITING_QUESTION_TEXT)
-    await message.answer(
-        "Отправьте текст вопроса в формате:\n"
-        "<metric_key>|<expected_type>|<text>[|enum1,enum2,...]\n"
-        "Пример: service_speed|number|Оцените скорость обслуживания от 1 до 5"
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="Текстом", callback_data="addq:text"),
+                InlineKeyboardButton(text="Голосом", callback_data="addq:voice"),
+            ]
+        ]
     )
+    await message.answer("Как добавить?", reply_markup=keyboard)
+
+
+@router.callback_query(F.data == "addq:text")
+async def admin_question_add_text(callback: CallbackQuery, state: FSMContext) -> None:
+    if callback.from_user is None or not await is_admin(callback.from_user.id):
+        await callback.answer("Только для админов", show_alert=True)
+        return
+    await state.set_state(AdminFlow.AWAITING_QUESTION_TEXT)
+    if isinstance(callback.message, Message):
+        await callback.message.answer(_ADD_QUESTION_TEXT_PROMPT)
+    await callback.answer()
 
 
 @router.message(AdminFlow.AWAITING_QUESTION_TEXT)
