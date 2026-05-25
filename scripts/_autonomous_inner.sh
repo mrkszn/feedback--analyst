@@ -161,6 +161,7 @@ case "$MODE" in
             claude -p "$(cat "$PROMPT_FILE")" \
                 --permission-mode dontAsk \
                 --max-turns 800 \
+                --verbose \
                 --output-format stream-json 2>&1 | tee "$LOG_FILE"
         ;;
     --smoke)
@@ -176,6 +177,7 @@ case "$MODE" in
             claude -p "$(cat "$PROMPT_FILE")" \
                 --permission-mode dontAsk \
                 --max-turns 30 \
+                --verbose \
                 --output-format stream-json 2>&1 | tee "$LOG_FILE"
         ;;
     --interactive)
