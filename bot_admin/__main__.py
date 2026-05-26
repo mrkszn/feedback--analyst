@@ -10,6 +10,7 @@ from bot_admin.handlers import (
     analytics_commands,
     auth,
     fallback,
+    mode,
     question_voice,
     questions,
 )
@@ -48,6 +49,8 @@ async def main() -> None:
     dp.include_router(questions.router)
     dp.include_router(question_voice.router)
     dp.include_router(admin_question_dialog.router)
+    # mode-toggle (📊/🛠) ловит точный F.text перед fallback'ом.
+    dp.include_router(mode.router)
     # analytics-команды должны срабатывать раньше fallback (LLM agent), чтобы
     # /insights /metric /topics /find /clients /ask не уходили в admin_agent.
     dp.include_router(analytics_commands.router)
