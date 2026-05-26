@@ -11,6 +11,7 @@
 
 ```
 85f0260  feat(bot-admin): persistent reply-keyboard + warmer /start                  (pre-session, #1)
+82f78de  chore(scripts): add --phase-2a-6 launcher mode + prompt                     (mid-session infra)
 9f0964c  feat(bot-admin): readable /questions with inline edit/delete                (#2)
 69b3b53  feat(services): deactivate_all_questions + find_question_by_text            (#3)
 d9c1463  feat(bot-admin): in-dialog AI-assisted question creation                    (#4)
@@ -18,6 +19,8 @@ d9c1463  feat(bot-admin): in-dialog AI-assisted question creation               
 8718506  feat(bot-admin): FSM sticky-state exit hatch                                (#6)
 9300a44  feat(bot-guest): warm finalize UX — progress ping + warm goodbye            (#7)
 ```
+
+`82f78de` was added by the human between commit #1 and #2 to wire the `--phase-2a-6` launcher mode + Phase 2A.6 prompt file before the autonomous orchestrator was invoked. It is not part of the 6 product commits this session but lives on the same branch.
 
 ### Per-commit highlights
 
@@ -92,3 +95,124 @@ After session the human runs ONE of:
   # from this session — main is unchanged anyway since all commits live on
   # the side branch.)
 ```
+
+---
+
+## Archived sessions
+
+Older session reports are preserved verbatim below (newest archive first). This file is **append-only** for session reports — never overwrite history, always demote previous H1 to H3 and append.
+
+---
+
+### 2026-05-25 — autonomous session `20260525-1621`, Phase 2A
+
+#### Session 2 (resume) — addendum
+
+Launcher re-invoked этот же orchestrator-промт на той же ветке после первой пробежки. В resume-run сделано:
+
+- **Cmd #3 завершён** — commit `5c48310` `feat(bot-guest): callback handler + /skip for typed questions`. Step 2 (callback handler) и Step 3 (/skip + ans:skip) объединены в один коммит, потому что skip-branch внутри `guest_answer_callback` атомарно не рассекается. Это **отклонение от плана** (план просил 2 коммита) — задокументировано тут как осознанное.
+- **Cmd #4 (reward-system) НЕ запускался** — требует `mcp__supabase__apply_migration` (в `ask` permissions = fail в dontAsk-режиме). Это by design, прошлая пробежка корректно его отложила, эта тоже. Делать оффлайн без миграции = ломать invariant «services соответствует схеме».
+- **Tests:** 177 passing (159 → 177, +18 новых). ruff+mypy clean.
+- **Final Phase 2A counts:** **3 / 4** commands ✓, **1 / 4** (Cmd #4) — deferred-by-design.
+
+##### Untracked artefact (НЕ закоммичено)
+
+- `docs/MINI_APP_DEVELOPMENT.md` (33KB) — пользовательский design-doc о возможном Mini App pivot, появился между сессиями. Не трогаю: вне scope Phase 2A, ваш черновик. Если нужно — сделайте `git add docs/MINI_APP_DEVELOPMENT.md` сами и решите формат коммита.
+
+##### Outstanding для следующей сессии
+
+1. **Cmd #4 (reward-system)** — нужна dedicated session: миграция 0003 + `mcp__supabase__apply_migration` интерактивно. Полная спецификация в плане §«Команда #4», ничего не поменялось.
+2. **Verification block** (план §«Verification») — реальный E2E прогон в Telegram (`uv run python -m bot_admin`, `uv run python -m bot_guest`) с новой keyboard-UX. До этого фактически не проверено живьём — только unit-тесты.
+3. **Strategy:** если приоритет сместился на Mini App (см. docs/MINI_APP_DEVELOPMENT.md), Cmd #4 можно вообще не делать в этом виде — reward-механика может жить иначе в Mini App. Решение за вами.
+
+#### Session 1 (original report — preserved)
+
+##### Session summary
+
+- **Duration:** ~2h 30m (started 13:03 UTC, hard deadline was +2h at 15:03 — went 30 min into overtime).
+- **Phase:** 2A (Admin Conversational MVP) — voice question advisor, typed-question UX, reward system.
+- **Commands completed:** **2 / 4** + **1 partial** (Cmd #3 lost commits #2 and #3 of 3).
+- **Commits on branch `autonomous/20260525-1621` (ahead of main): 9** total (1 launcher infra + 8 product).
+- **Tests:** **159 passing** (up from 107 baseline at session start). `uv run ruff check .` clean. `uv run mypy .` clean.
+
+##### What landed
+
+###### Command #1 — `fn-admin-freetext-fallback` ✓ (pre-resume from earlier session on this branch)
+
+| # | SHA      | Title |
+|---|----------|-------|
+| 1 | 061c895  | `feat(bot-admin): fallback for non-command messages` |
+
+Admin bot now responds to free-text (non-command, non-FSM) messages with the available commands list.
+
+###### Command #2 — `fn-voice-question-advisor` ✓ (6 atomic commits in ~18 min)
+
+| # | SHA      | Title |
+|---|----------|-------|
+| 2 | 3814c3f  | `feat(fsm): admin question-voice states` |
+| 3 | 5b1ffc5  | `feat(config): RESTAURANT_CONTEXT env var` |
+| 4 | bdd6762  | `feat(agent): synthesize_questions + regenerate_single_question` |
+| 5 | 72573bc  | `feat(bot-admin): voice question advisor handlers` |
+| 6 | 9f0662c  | `refactor(bot-admin): /add_question with text/voice menu` |
+| 7 | f7ff50d  | `chore(env): RESTAURANT_CONTEXT in .env.example` |
+
+End-to-end voice-driven question creation: admin `/add_question` → `[Текстом]/[Голосом]` inline menu → count (1–10) → voice → Whisper → LLM synthesizes N drafts → per-draft inline approve/edit/regen/cancel. Reviewer ✅ approved on shutdown.
+
+Stack: aiogram 3 FSM (3 new states), LangChain `ChatPromptTemplate` + `with_structured_output`, tenacity retries inherited from `integrations/openai_chat.py`. Drafts live only in FSM state until Confirm.
+
+###### Command #3 — `fn-guest-typed-questions-rendering` ✗ partial (1 of 3 commits)
+
+| # | SHA      | Title |
+|---|----------|-------|
+| 8 | 3a0c63f  | `feat(bot-guest): inline keyboards for typed questions` |
+
+`bot_guest/keyboards.py::build_question_keyboard` ships — renders inline keyboards for `boolean` / `number` / `enum`, returns `None` for `text`, falls back to text-mode for `enum` with empty `enum_values` (with warning). 13 keyboard tests pass.
+
+**Lost / not committed:**
+- Commit #2 of Cmd #3 (`feat(bot-guest): callback handler for question answers`). Implementer wrote `guest_answer_callback` in `bot_guest/handlers/feedback.py` and `tests/test_guest_answer_callback.py` — at one point all 168 tests passed including the new file — but during wind-down team-lead-2 discarded the WIP via `git restore` + `rm` instead of committing it.
+- Commit #3 of Cmd #3 (`feat(bot-guest): /skip support`) was never started.
+
+###### Command #4 — `fn-reward-system` — not started
+
+Skipped entirely due to time. Migration 0003, `services/rewards.py`, admin CRUD, `/redeem`, guest-side issue at `_finalize_session`, progress-prefix UX — all deferred.
+
+##### What broke this session
+
+###### Misjudgment of pace at the soft-deadline boundary
+
+After Cmd #2 closed at ~30 min elapsed, I assumed the same pace would carry through Cmd #3 and #4. I did not enforce the soft deadline (+1h45m) as the actual "no new commands" boundary. The harness paused/resumed and ate ~1h45m of wall-time silently (timestamp jumped from 15:42 to 17:27 in tool messages with no signal). When I came back the clock was at 2h24m.
+
+###### Discarded WIP during wind-down
+
+My wind-down message gave two branches: (a) commit if green, (b) drop if red. team-lead-2 took branch (b) even though `git diff` showed the WIP was green by then (168 tests passing). Recovery via reflog/stash unavailable — the WIP existed only as untracked + unstaged.
+
+###### Namespace collision: `team-lead`
+
+`TeamCreate` reserves the literal name `team-lead` for the parent orchestrator. When you spawn an Agent named `team-lead` it gets `team-lead-2`, and all four subagents' role prompts (which referenced `team-lead`) had to be patched live with routing-correction DMs. Fix for next session: name the spawned coordinator agent something else from the start (e.g. `lead`, `coord`, `fn-lead`) — never `team-lead`.
+
+##### Decisions taken without explicit approval
+
+1. **Skipped Cmd #4 entirely** rather than start a half-baked migration. Migration 0003 + `mcp__supabase__apply_migration` workflow needs your hands anyway (it's in `ask`), and starting it in the last 5 min of wind-down would have left the schema in a worse state than not starting.
+2. **Did not retry to re-author Cmd #3 Step 2** locally as orchestrator. Better to lose the work cleanly than to land an unreviewed handler that handles real user input.
+3. **Reviewer approve for Cmd #2 came after commits**, not before. team-lead-2 ran the two in parallel and reviewer's ✅ arrived only at team shutdown. Process drift worth noting.
+
+##### Outstanding questions for the human (at archive time)
+
+1. **Cmd #3 next session — re-author or restore from .pyc?** The .pyc at `tests/__pycache__/test_guest_answer_callback.cpython-312-pytest-9.0.3.pyc` is the only trace of the lost test file. Cheaper to re-write the ~150-line file from scratch + the ~80-line `guest_answer_callback`. Estimated 30–45 min. **Resolved later:** re-authored in resume-run as commit `5c48310`.
+2. **Commit gate for autonomous sessions** — add "no new command after soft deadline (1h45m)"? Would have prevented this overrun.
+3. **`team-lead` vs `team-lead-2` collision** — should the launcher reserve a non-colliding orchestrator name? **Resolved:** prompts now spawn coordinator as `lead`.
+4. **Cmd #4 — full re-run or trim?** Still open as of Phase 2A.6.
+
+##### Session-specific git context
+
+```
+Branch:  autonomous/20260525-1621
+Pre-tag: pre-autonomous-20260525-1621
+```
+
+##### Next session — recommended starting point (at archive time)
+
+1. **Re-author Cmd #3 Step 2** — _resolved as commit `5c48310` in resume-run._
+2. **Cmd #3 Step 3** — _merged into `5c48310`._
+3. **Cmd #4 full** (`fn-reward-system`) — still deferred to Backlog as of Phase 2A.6.
+4. **Verification block** — partially done in Phase 2A.6 live-test screens; full E2E pending.
