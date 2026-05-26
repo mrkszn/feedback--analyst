@@ -17,6 +17,8 @@ from typing import Any, Literal, TypedDict, cast
 from supabase import Client
 
 from db.client import get_supabase
+from integrations.openai_embed import embed_text
+from integrations.pinecone import query_similar_sessions
 
 GroupBy = Literal["day", "week", "none"]
 Sentiment = Literal["positive", "neutral", "negative"]
@@ -47,6 +49,25 @@ class SummaryOverview(TypedDict):
     avg_sentiment: float | None
     top_positive_topics: list[TopicCount]
     top_negative_topics: list[TopicCount]
+
+
+class SemanticHit(TypedDict):
+    session_id: str
+    client_id: int | None
+    score: float
+    summary_text: str
+    sentiment: str | None
+    started_at: str | None
+
+
+class ClientProfile(TypedDict):
+    telegram_id: int
+    name: str | None
+    sessions_count: int
+    last_session_at: str | None
+    avg_sentiment: float | None
+    recent_cards: list[dict[str, Any]]
+    top_topics: list[TopicCount]
 
 
 # --------------------------------------------------------------------------- #
@@ -288,5 +309,188 @@ async def summary_overview(
             "avg_sentiment": avg_sentiment,
             "top_positive_topics": pos_topics[:3],
             "top_negative_topics": neg_topics[:3],
+        },
+    )
+
+
+# --------------------------------------------------------------------------- #
+# semantic_search
+
+
+async def semantic_search(
+    query_text: str,
+    top_k: int = 20,
+    *,
+    db: Client | None = None,
+) -> list[SemanticHit]:
+    """Natural-language поиск по client-cards. Embed → Pinecone query →
+    JOIN с Supabase sessions + client_cards для контекста (summary_text,
+    sentiment, started_at).
+    """
+    if not query_text.strip():
+        raise ValueError("query_text must not be empty")
+    if top_k <= 0:
+        raise ValueError("top_k must be positive")
+
+    vector = await embed_text(query_text.strip())
+    matches = await query_similar_sessions(vector=vector, top_k=top_k)
+    if not matches:
+        return []
+
+    session_ids = [m["session_id"] for m in matches if m["session_id"]]
+    if not session_ids:
+        return []
+
+    db = db or get_supabase()
+
+    def _q_sessions() -> Any:
+        return (
+            db.table("sessions")
+            .select("id, client_id, feedback_summary, started_at")
+            .in_("id", session_ids)
+            .execute()
+        )
+
+    def _q_cards() -> Any:
+        return (
+            db.table("client_cards")
+            .select("session_id, summary_text")
+            .in_("session_id", session_ids)
+            .execute()
+        )
+
+    s_resp, c_resp = await asyncio.gather(
+        asyncio.to_thread(_q_sessions),
+        asyncio.to_thread(_q_cards),
+    )
+    sessions_by_id: dict[str, dict[str, Any]] = {str(r["id"]): r for r in (s_resp.data or [])}
+    cards_by_session: dict[str, str] = {
+        str(r["session_id"]): str(r.get("summary_text") or "") for r in (c_resp.data or [])
+    }
+
+    out: list[SemanticHit] = []
+    for m in matches:
+        sid = m["session_id"]
+        sess = sessions_by_id.get(sid) or {}
+        summary = sess.get("feedback_summary") or {}
+        sentiment = summary.get("sentiment") if isinstance(summary, dict) else None
+        out.append(
+            SemanticHit(
+                session_id=sid,
+                client_id=m.get("client_id") or sess.get("client_id"),
+                score=m["score"],
+                summary_text=cards_by_session.get(sid, ""),
+                sentiment=str(sentiment) if sentiment else None,
+                started_at=str(sess.get("started_at")) if sess.get("started_at") else None,
+            )
+        )
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# client_profile
+
+
+async def client_profile(
+    telegram_id: int,
+    *,
+    recent_cards_limit: int = 3,
+    db: Client | None = None,
+) -> ClientProfile:
+    """Полный профиль клиента: все сессии + последние N карточек + сводка
+    (avg sentiment, top topics). LookupError если клиент не найден.
+    """
+    if recent_cards_limit <= 0:
+        raise ValueError("recent_cards_limit must be positive")
+
+    db = db or get_supabase()
+
+    def _q_client() -> Any:
+        return (
+            db.table("clients")
+            .select("telegram_id, name")
+            .eq("telegram_id", telegram_id)
+            .limit(1)
+            .execute()
+        )
+
+    c_resp = await asyncio.to_thread(_q_client)
+    if not c_resp.data:
+        raise LookupError(f"client {telegram_id} not found")
+    client_row = c_resp.data[0]
+
+    def _q_sessions() -> Any:
+        return (
+            db.table("sessions")
+            .select("id, started_at, feedback_summary")
+            .eq("client_id", telegram_id)
+            .order("started_at", desc=True)
+            .execute()
+        )
+
+    def _q_cards() -> Any:
+        return (
+            db.table("client_cards")
+            .select("session_id, summary_text, created_at")
+            .eq("client_id", telegram_id)
+            .order("created_at", desc=True)
+            .limit(recent_cards_limit)
+            .execute()
+        )
+
+    s_resp, c2_resp = await asyncio.gather(
+        asyncio.to_thread(_q_sessions),
+        asyncio.to_thread(_q_cards),
+    )
+    sessions = list(s_resp.data or [])
+    cards = list(c2_resp.data or [])
+
+    last_session_at = (
+        str(sessions[0]["started_at"]) if sessions and sessions[0].get("started_at") else None
+    )
+
+    sentiments: list[float] = []
+    topic_counts: dict[str, int] = defaultdict(int)
+    topic_sentiments: dict[str, list[float]] = defaultdict(list)
+    for s in sessions:
+        summary = s.get("feedback_summary")
+        if not isinstance(summary, dict):
+            continue
+        sent = summary.get("sentiment")
+        score = _SENTIMENT_SCORE.get(str(sent))
+        if score is not None:
+            sentiments.append(score)
+        topics = summary.get("topics") or []
+        if not isinstance(topics, list):
+            continue
+        for t in topics:
+            if not isinstance(t, str) or not t.strip():
+                continue
+            key = t.strip().lower()
+            topic_counts[key] += 1
+            topic_sentiments[key].append(score if score is not None else 0.0)
+
+    top_topics: list[TopicCount] = []
+    for topic, count in topic_counts.items():
+        scores = topic_sentiments[topic]
+        top_topics.append(
+            TopicCount(
+                topic=topic,
+                count=count,
+                avg_sentiment=(sum(scores) / len(scores)) if scores else 0.0,
+            )
+        )
+    top_topics.sort(key=lambda x: x["count"], reverse=True)
+
+    return cast(
+        ClientProfile,
+        {
+            "telegram_id": int(client_row["telegram_id"]),
+            "name": client_row.get("name"),
+            "sessions_count": len(sessions),
+            "last_session_at": last_session_at,
+            "avg_sentiment": (sum(sentiments) / len(sentiments)) if sentiments else None,
+            "recent_cards": cards,
+            "top_topics": top_topics[:5],
         },
     )
