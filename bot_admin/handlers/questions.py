@@ -10,6 +10,7 @@ from aiogram.types import (
     Message,
 )
 
+from bot_admin.keyboards import BTN_ADD_QUESTION, BTN_QUESTIONS
 from bot_common.fsm.states import AdminFlow
 from db.client import get_supabase
 from services.admin_auth import is_admin
@@ -31,6 +32,16 @@ async def require_admin(message: Message) -> bool:
         await message.answer("Доступ только для админов. /claim — для первой регистрации.")
         return False
     return True
+
+
+@router.message(F.text == BTN_QUESTIONS)
+async def admin_questions_list_button(message: Message) -> None:
+    await admin_questions_list(message)
+
+
+@router.message(F.text == BTN_ADD_QUESTION)
+async def admin_question_add_button(message: Message, state: FSMContext) -> None:
+    await admin_question_add(message, state)
 
 
 @router.message(Command("questions"))
