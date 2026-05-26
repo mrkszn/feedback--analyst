@@ -7,6 +7,7 @@ from aiogram.types import BotCommand
 
 from bot_admin.handlers import (
     admin_question_dialog,
+    analytics_commands,
     auth,
     fallback,
     question_voice,
@@ -41,6 +42,9 @@ async def main() -> None:
     dp.include_router(questions.router)
     dp.include_router(question_voice.router)
     dp.include_router(admin_question_dialog.router)
+    # analytics-команды должны срабатывать раньше fallback (LLM agent), чтобы
+    # /insights /metric /topics /find /clients /ask не уходили в admin_agent.
+    dp.include_router(analytics_commands.router)
     dp.include_router(fallback.router)
 
     await dp.start_polling(bot)
