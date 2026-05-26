@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from aiogram.types import InlineKeyboardMarkup, Message
 
 from bot_admin.handlers.questions import (
+    admin_question_delete_all_apply,
     admin_question_delete_all_confirm,
     admin_question_delete_apply,
     admin_question_delete_cancel,
@@ -169,6 +170,36 @@ async def test_qdelno_cancels() -> None:
     await admin_question_delete_cancel(cb)
     cb.message.edit_text.assert_awaited_once()
     assert "Отменено" in cb.message.edit_text.await_args.args[0]
+
+
+async def test_qdelallyes_calls_service_and_reports_count() -> None:
+    cb = _mk_callback("qdelallyes")
+    with (
+        patch("bot_admin.handlers.questions.is_admin", new=AsyncMock(return_value=True)),
+        patch(
+            "bot_admin.handlers.questions.deactivate_all_questions",
+            new=AsyncMock(return_value=5),
+        ) as svc,
+    ):
+        await admin_question_delete_all_apply(cb)
+    svc.assert_awaited_once()
+    cb.message.edit_text.assert_awaited_once()
+    text = cb.message.edit_text.await_args.args[0]
+    assert "5" in text
+
+
+async def test_qdelallyes_empty_pool_message() -> None:
+    cb = _mk_callback("qdelallyes")
+    with (
+        patch("bot_admin.handlers.questions.is_admin", new=AsyncMock(return_value=True)),
+        patch(
+            "bot_admin.handlers.questions.deactivate_all_questions",
+            new=AsyncMock(return_value=0),
+        ),
+    ):
+        await admin_question_delete_all_apply(cb)
+    text = cb.message.edit_text.await_args.args[0]
+    assert "нечего" in text.lower() or "нет" in text.lower()
 
 
 async def test_qdelall_shows_confirm() -> None:

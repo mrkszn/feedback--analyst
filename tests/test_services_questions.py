@@ -5,7 +5,9 @@ import pytest
 
 from services.questions import (
     create_question,
+    deactivate_all_questions,
     delete_question,
+    find_question_by_text,
     list_questions,
     update_question,
 )
@@ -96,3 +98,43 @@ async def test_list_active_only() -> None:
     result = await list_questions(active_only=True, db=db)
     assert len(result) == 1
     db.table.return_value.select.return_value.eq.assert_called_once_with("is_active", True)
+
+
+async def test_deactivate_all_returns_count() -> None:
+    db = MagicMock()
+    chain = db.table.return_value.update.return_value.eq.return_value
+    chain.execute.return_value.data = [
+        {"id": "1", "is_active": False},
+        {"id": "2", "is_active": False},
+        {"id": "3", "is_active": False},
+    ]
+    count = await deactivate_all_questions(db=db)
+    assert count == 3
+    # Update payload должен быть {is_active: False}
+    args, _ = db.table.return_value.update.call_args
+    assert args[0] == {"is_active": False}
+
+
+async def test_deactivate_all_empty_pool_returns_zero() -> None:
+    db = MagicMock()
+    chain = db.table.return_value.update.return_value.eq.return_value
+    chain.execute.return_value.data = []
+    count = await deactivate_all_questions(db=db)
+    assert count == 0
+
+
+async def test_find_question_by_text_empty_query_returns_empty() -> None:
+    result = await find_question_by_text("  ", db=MagicMock())
+    assert result == []
+
+
+async def test_find_question_by_text_uses_ilike_pattern() -> None:
+    db = MagicMock()
+    chain = db.table.return_value.select.return_value.eq.return_value.or_.return_value
+    chain.execute.return_value.data = [{"id": "1", "text": "Понравилась ли еда?"}]
+    result = await find_question_by_text("еда", db=db)
+    assert len(result) == 1
+    or_call = db.table.return_value.select.return_value.eq.return_value.or_.call_args
+    assert "%еда%" in or_call.args[0]
+    assert "text.ilike" in or_call.args[0]
+    assert "metric_key.ilike" in or_call.args[0]

@@ -16,6 +16,7 @@ from db.client import get_supabase
 from services.admin_auth import is_admin
 from services.questions import (
     create_question,
+    deactivate_all_questions,
     delete_question,
     list_questions,
     update_question,
@@ -244,11 +245,18 @@ async def admin_question_delete_all_confirm(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "qdelallyes")
 async def admin_question_delete_all_apply(callback: CallbackQuery) -> None:
-    # Сервисная функция приходит в коммите #3. Пока no-op заглушка.
     if not await _require_admin_cb(callback):
         return
+    count = await deactivate_all_questions()
     if isinstance(callback.message, Message):
-        await callback.message.answer("Сервис ещё не подключён, попробуйте позже.")
+        if count == 0:
+            text = "Активных вопросов нет — нечего скрывать."
+        else:
+            text = f"🗑 Скрыто вопросов: {count}. История сохранена."
+        try:
+            await callback.message.edit_text(text)
+        except Exception:
+            await callback.message.answer(text)
     await callback.answer()
 
 
