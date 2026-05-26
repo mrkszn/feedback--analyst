@@ -12,12 +12,18 @@ from api.auth.jwt import issue_token
 from api.auth.telegram_webapp import validate_initdata
 from api.deps.auth import current_admin
 from api.schemas.admin import (
+    AskRequest,
+    AskResponse,
     AuthRequest,
     AuthResponse,
     CategoryCountOut,
+    ClientProfileResponse,
     MetricPointOut,
     MetricsResponse,
     OverviewResponse,
+    SemanticHitOut,
+    SemanticSearchRequest,
+    SemanticSearchResponse,
     Sentiment,
     TopicCountOut,
     TopicsResponse,
@@ -28,6 +34,8 @@ from services.admin_auth import is_admin
 from services.analytics import (
     aggregate_metric,
     categorical_distribution,
+    client_profile,
+    semantic_search,
     summary_overview,
     topic_histogram,
 )
@@ -167,3 +175,63 @@ async def topics(
         raise HTTPException(status_code=400, detail="date_from must be <= date_to")
     rows = await topic_histogram(date_from, date_to, sentiment_filter=sentiment)
     return TopicsResponse(topics=[TopicCountOut(**t) for t in rows])
+
+
+# --------------------------------------------------------------------------- #
+# POST /admin/semantic
+
+
+@router.post("/semantic", response_model=SemanticSearchResponse)
+async def semantic(
+    body: SemanticSearchRequest,
+    _admin_id: Annotated[int, Depends(current_admin)],
+) -> SemanticSearchResponse:
+    try:
+        hits = await semantic_search(body.query, top_k=body.top_k)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return SemanticSearchResponse(hits=[SemanticHitOut(**h) for h in hits])
+
+
+# --------------------------------------------------------------------------- #
+# GET /admin/clients/{telegram_id}
+
+
+@router.get("/clients/{telegram_id}", response_model=ClientProfileResponse)
+async def client(
+    telegram_id: int,
+    _admin_id: Annotated[int, Depends(current_admin)],
+) -> ClientProfileResponse:
+    try:
+        p = await client_profile(telegram_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return ClientProfileResponse(
+        telegram_id=p["telegram_id"],
+        name=p["name"],
+        sessions_count=p["sessions_count"],
+        last_session_at=p["last_session_at"],
+        avg_sentiment=p["avg_sentiment"],
+        recent_cards=p["recent_cards"],
+        top_topics=[TopicCountOut(**t) for t in p["top_topics"]],
+    )
+
+
+# --------------------------------------------------------------------------- #
+# POST /admin/ask
+
+
+@router.post("/ask", response_model=AskResponse)
+async def ask(
+    body: AskRequest,
+    _admin_id: Annotated[int, Depends(current_admin)],
+) -> AskResponse:
+    # Local import — avoid pulling LangChain at api module-load time.
+    from agent.nodes.admin_ask import answer_admin_question
+
+    answer = await answer_admin_question(body.question, conversation_history=body.history)
+    return AskResponse(
+        answer_text=answer.answer_text,
+        tools_used=answer.tools_used,
+        chart_text=answer.chart_text,
+    )
