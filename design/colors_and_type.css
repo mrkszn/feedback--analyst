@@ -1,0 +1,297 @@
+/* =============================================================
+   Voice — colors_and_type.css
+   Mounted in HTML mocks; the production app re-exports the same
+   tokens through Tailwind config + shadcn CSS vars.
+   ============================================================= */
+
+/* --- Fonts -------------------------------------------------- */
+/* Geist Sans + Geist Mono via Google Fonts. Substitute by editing
+   --font-sans / --font-mono below. */
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap');
+
+/* --- Base palette (raw, never used directly in components) -- */
+:root {
+  /* Brand — Admin (purple) */
+  --violet-50:  #f5f3ff;
+  --violet-100: #ede9fe;
+  --violet-200: #ddd6fe;
+  --violet-300: #c4b5fd;
+  --violet-400: #a78bfa;
+  --violet-500: #8b5cf6;
+  --violet-600: #7c3aed;
+  --violet-700: #6d28d9;
+  --violet-800: #5b21b6;
+  --violet-900: #4c1d95;
+
+  /* Brand — Receiver (indigo) */
+  --indigo-50:  #eef2ff;
+  --indigo-100: #e0e7ff;
+  --indigo-200: #c7d2fe;
+  --indigo-300: #a5b4fc;
+  --indigo-400: #818cf8;
+  --indigo-500: #6366f1;
+  --indigo-600: #4f46e5;
+  --indigo-700: #4338ca;
+  --indigo-800: #3730a3;
+
+  /* Accent — amber (pulled from logo centre line) */
+  --amber-100: #fef3c7;
+  --amber-300: #fcd34d;
+  --amber-500: #f59e0b;
+  --amber-700: #b45309;
+
+  /* Neutrals — slate */
+  --slate-50:  #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-150: #e9eef5;
+  --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-700: #334155;
+  --slate-800: #1e293b;
+  --slate-900: #0f172a;
+  --slate-950: #020617;
+
+  /* Semantic raw */
+  --emerald-500: #10b981;
+  --emerald-600: #059669;
+  --rose-500:    #f43f5e;
+  --rose-600:    #e11d48;
+  --sky-500:     #0ea5e9;
+}
+
+/* --- Semantic tokens, light (Voice / Admin) ----------------- */
+:root,
+[data-theme="light"] {
+  --bg:              var(--slate-50);
+  --surface:         #ffffff;
+  --surface-2:       var(--slate-100);
+  --surface-hover:   var(--slate-100);
+  --surface-pressed: var(--slate-150);
+
+  --border:          var(--slate-200);
+  --border-strong:   var(--slate-300);
+
+  --text-1:          var(--slate-900);   /* primary  */
+  --text-2:          var(--slate-600);   /* secondary */
+  --text-3:          var(--slate-500);   /* tertiary, captions */
+  --text-disabled:   var(--slate-400);
+  --text-inverse:    #ffffff;
+
+  --primary:         var(--violet-600);
+  --primary-hover:   var(--violet-700);
+  --primary-pressed: var(--violet-800);
+  --primary-soft:    var(--violet-100);
+  --primary-on:      #ffffff;
+
+  --accent:          var(--amber-500);
+  --accent-soft:     var(--amber-100);
+
+  --success:         var(--emerald-600);
+  --success-soft:    #ecfdf5;
+  --warning:         var(--amber-500);
+  --warning-soft:    #fffbeb;
+  --danger:          var(--rose-600);
+  --danger-soft:     #fff1f2;
+  --info:            var(--sky-500);
+  --info-soft:       #f0f9ff;
+
+  --ring:            color-mix(in oklch, var(--primary) 40%, transparent);
+
+  --shadow-1: 0 1px 0 rgba(15, 23, 42, 0.04);
+  --shadow-2: 0 -4px 12px rgba(15, 23, 42, 0.06);
+  --shadow-3: 0 24px 48px -12px rgba(15, 23, 42, 0.18);
+
+  --scrim:   rgba(15, 23, 42, 0.5);
+
+  color-scheme: light;
+}
+
+/* --- Semantic tokens, dark --------------------------------- */
+[data-theme="dark"] {
+  --bg:              #0b1020;
+  --surface:         #0f172a;            /* slate-900 */
+  --surface-2:       #111a2e;
+  --surface-hover:   #18223a;
+  --surface-pressed: #1f2a44;
+
+  --border:          #1f2a44;
+  --border-strong:   #2a3658;
+
+  --text-1:          #f1f5f9;
+  --text-2:          #94a3b8;
+  --text-3:          #64748b;
+  --text-disabled:   #475569;
+  --text-inverse:    #0f172a;
+
+  --primary:         var(--violet-400);
+  --primary-hover:   var(--violet-300);
+  --primary-pressed: var(--violet-500);
+  --primary-soft:    rgba(139, 92, 246, 0.16);
+  --primary-on:      #0f172a;
+
+  --accent:          var(--amber-300);
+  --accent-soft:     rgba(245, 158, 11, 0.16);
+
+  --success:         #34d399;
+  --success-soft:    rgba(16, 185, 129, 0.16);
+  --warning:         var(--amber-300);
+  --warning-soft:    rgba(245, 158, 11, 0.16);
+  --danger:          #fb7185;
+  --danger-soft:     rgba(244, 63, 94, 0.16);
+  --info:            #38bdf8;
+  --info-soft:       rgba(14, 165, 233, 0.16);
+
+  --ring:            color-mix(in oklch, var(--primary) 50%, transparent);
+
+  --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 -4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-3: 0 24px 48px -12px rgba(0, 0, 0, 0.6);
+
+  --scrim:   rgba(2, 6, 23, 0.6);
+
+  color-scheme: dark;
+}
+
+/* --- Telegram theme bridge --------------------------------- *
+ * When mounted inside Telegram, --tg-theme-* are populated by
+ * the WebApp SDK. We use them where they make sense; everything
+ * else stays on Voice palette so the brand survives an aggressive
+ * user theme. */
+:root.tg-themed {
+  --bg:              var(--tg-theme-secondary-bg-color, var(--bg));
+  --surface:         var(--tg-theme-bg-color, var(--surface));
+  --text-1:          var(--tg-theme-text-color, var(--text-1));
+  --text-2:          var(--tg-theme-hint-color, var(--text-2));
+  /* Primary stays Voice violet — too important to hand to user theme. */
+}
+
+/* --- Radius + spacing -------------------------------------- */
+:root {
+  --radius-1: 4px;    /* tag */
+  --radius-2: 6px;    /* input */
+  --radius-3: 8px;    /* button, small card */
+  --radius-4: 12px;   /* card */
+  --radius-5: 16px;   /* sheet, modal */
+  --radius-full: 999px;
+
+  --space-1:  2px;
+  --space-2:  4px;
+  --space-3:  6px;
+  --space-4:  8px;
+  --space-5:  12px;
+  --space-6:  16px;
+  --space-7:  20px;
+  --space-8:  24px;
+  --space-9:  32px;
+  --space-10: 40px;
+  --space-11: 48px;
+  --space-12: 64px;
+
+  /* Layout */
+  --page-pad: 16px;
+  --card-pad: 16px;
+  --nav-height: 56px;
+  --header-height: 44px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (min-width: 768px) {
+  :root {
+    --page-pad: 24px;
+    --card-pad: 20px;
+  }
+}
+
+/* --- Type tokens ------------------------------------------- */
+:root {
+  --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* size / line-height / letter-spacing / weight */
+  --display:  28px / 32px;
+  --h1:       22px / 28px;
+  --h2:       18px / 24px;
+  --h3:       16px / 22px;
+  --body:     15px / 22px;
+  --body-sm:  13px / 18px;
+  --caption:  12px / 16px;
+  --overline: 11px / 14px;
+}
+
+/* --- Base reset + typography rules ------------------------- */
+html, body {
+  background: var(--bg);
+  color: var(--text-1);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 22px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-variant-numeric: tabular-nums;
+}
+
+* { box-sizing: border-box; }
+
+.display {
+  font: 600 var(--display) var(--font-sans);
+  letter-spacing: -0.02em;
+}
+.h1 {
+  font: 600 var(--h1) var(--font-sans);
+  letter-spacing: -0.01em;
+}
+.h2 {
+  font: 600 var(--h2) var(--font-sans);
+  letter-spacing: -0.005em;
+}
+.h3 {
+  font: 600 var(--h3) var(--font-sans);
+}
+.body {
+  font: 400 var(--body) var(--font-sans);
+}
+.body-strong {
+  font: 500 var(--body) var(--font-sans);
+}
+.body-sm {
+  font: 400 var(--body-sm) var(--font-sans);
+  color: var(--text-2);
+}
+.caption {
+  font: 500 var(--caption) var(--font-sans);
+  color: var(--text-3);
+}
+.overline {
+  font: 600 var(--overline) var(--font-sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.mono, .numeric {
+  font-family: var(--font-mono);
+  font-feature-settings: 'tnum' 1, 'ss01' 1;
+}
+
+/* --- Focus ring -------------------------------------------- */
+:where(button, [role="button"], a, input, textarea, select):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-2);
+}
+
+/* --- Primitive shorthands the kits rely on ----------------- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-4);
+  padding: var(--card-pad);
+}
+
+.divider {
+  height: 1px;
+  background: var(--border);
+  border: 0;
+}

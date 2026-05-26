@@ -1,0 +1,30 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="_base.css"><title>Spacing</title>
+<style>
+.scale { display: flex; align-items: flex-end; gap: 14px; padding: 6px 0; }
+.bar { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.bar .bx { width: 24px; background: var(--violet-200); border: 1px solid var(--violet-300); border-radius: 4px; }
+.bar .lbl { font: 500 11px/14px var(--font-mono); color: var(--text-3); }
+.legend { display: flex; gap: 16px; margin-top: 8px; font: 400 12px/16px var(--font-sans); color: var(--text-2); }
+</style></head>
+<body>
+<div class="scale">
+  <div class="bar"><div class="bx" style="height:2px"></div><div class="lbl">2</div></div>
+  <div class="bar"><div class="bx" style="height:4px"></div><div class="lbl">4</div></div>
+  <div class="bar"><div class="bx" style="height:6px"></div><div class="lbl">6</div></div>
+  <div class="bar"><div class="bx" style="height:8px"></div><div class="lbl">8</div></div>
+  <div class="bar"><div class="bx" style="height:12px"></div><div class="lbl">12</div></div>
+  <div class="bar"><div class="bx" style="height:16px"></div><div class="lbl">16</div></div>
+  <div class="bar"><div class="bx" style="height:20px"></div><div class="lbl">20</div></div>
+  <div class="bar"><div class="bx" style="height:24px"></div><div class="lbl">24</div></div>
+  <div class="bar"><div class="bx" style="height:32px"></div><div class="lbl">32</div></div>
+  <div class="bar"><div class="bx" style="height:40px"></div><div class="lbl">40</div></div>
+  <div class="bar"><div class="bx" style="height:48px"></div><div class="lbl">48</div></div>
+  <div class="bar"><div class="bx" style="height:64px"></div><div class="lbl">64</div></div>
+</div>
+<div class="legend">
+  <span>4 px base grid</span>
+  <span>Page padding 16 / 24</span>
+  <span>Card padding 16 / 20</span>
+  <span>Section gap 24</span>
+</div>
+</body></html>

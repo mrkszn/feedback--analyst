@@ -1,0 +1,45 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="_base.css"><title>Inputs</title>
+<style>
+.row { display: flex; gap: 12px; margin-bottom: 12px; }
+.row:last-child { margin-bottom: 0; }
+.field { flex: 1; }
+.field .lbl { font: 600 12px/16px var(--font-sans); color: var(--text-2); margin-bottom: 6px; }
+.input { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); }
+.input input { border: 0; outline: 0; background: transparent; flex: 1; font: 400 15px/20px var(--font-sans); color: var(--text-1); min-width: 0; }
+.input.focused { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 18%, transparent); }
+.input.error { border-color: var(--danger); }
+.input svg { width: 16px; height: 16px; color: var(--text-3); flex-shrink: 0; }
+.hint { font: 400 12px/16px var(--font-sans); color: var(--text-3); margin-top: 4px; }
+.hint.err { color: var(--danger); }
+.input.disabled { background: var(--slate-100); pointer-events: none; }
+.input.disabled input { color: var(--text-disabled); }
+</style></head>
+<body>
+<div class="row">
+  <div class="field">
+    <div class="lbl">Search</div>
+    <div class="input">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input value="client #1287" />
+    </div>
+  </div>
+  <div class="field">
+    <div class="lbl">Focused</div>
+    <div class="input focused">
+      <input value="restaurant" />
+    </div>
+  </div>
+</div>
+<div class="row">
+  <div class="field">
+    <div class="lbl">Error</div>
+    <div class="input error"><input value="bad@" /></div>
+    <div class="hint err">Введите корректный email</div>
+  </div>
+  <div class="field">
+    <div class="lbl">Disabled</div>
+    <div class="input disabled"><input value="readonly_value" /></div>
+    <div class="hint">Поле недоступно</div>
+  </div>
+</div>
+</body></html>

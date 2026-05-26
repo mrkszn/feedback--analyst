@@ -1,0 +1,18 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="_base.css"><title>Elevation</title>
+<style>
+body { background: var(--slate-100); }
+.row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; padding: 8px; }
+.card-e { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; height: 80px; display: flex; flex-direction: column; justify-content: space-between; }
+.card-e .name { font: 600 13px/16px var(--font-sans); color: var(--text-1); }
+.card-e .hint { font: 500 11px/14px var(--font-mono); color: var(--text-3); }
+.e1 { box-shadow: 0 1px 0 rgba(15,23,42,0.04); }
+.e2 { box-shadow: 0 -4px 12px rgba(15,23,42,0.06); }
+.e3 { box-shadow: 0 24px 48px -12px rgba(15,23,42,0.18); }
+</style></head>
+<body>
+<div class="row">
+  <div class="card-e e1"><div class="name">shadow-1</div><div class="hint">divider, sticky header</div></div>
+  <div class="card-e e2"><div class="name">shadow-2</div><div class="hint">bottom-nav, FAB</div></div>
+  <div class="card-e e3"><div class="name">shadow-3</div><div class="hint">modal sheet</div></div>
+</div>
+</body></html>

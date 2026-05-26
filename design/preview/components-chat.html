@@ -1,0 +1,22 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="_base.css"><title>Chat</title>
+<style>
+.chat { display: flex; flex-direction: column; gap: 8px; }
+.bubble { max-width: 80%; padding: 10px 12px; border-radius: 14px; font: 400 14px/20px var(--font-sans); }
+.from-user { align-self: flex-end; background: var(--violet-600); color: white; border-bottom-right-radius: 4px; }
+.from-bot  { align-self: flex-start; background: var(--surface); color: var(--text-1); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+.from-bot .ts, .from-user .ts { font: 500 11px/14px var(--font-mono); margin-top: 4px; }
+.from-user .ts { color: rgba(255,255,255,0.7); }
+.from-bot .ts  { color: var(--text-3); }
+.thinking { display: inline-flex; align-items: center; gap: 4px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; border-bottom-left-radius: 4px; align-self: flex-start; }
+.thinking .d { width: 6px; height: 6px; border-radius: 999px; background: var(--amber-500); animation: bob 1.2s infinite ease-in-out; }
+.thinking .d:nth-child(2) { animation-delay: 0.15s; }
+.thinking .d:nth-child(3) { animation-delay: 0.3s; }
+@keyframes bob { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-3px); opacity: 1; } }
+</style></head>
+<body>
+<div class="chat">
+  <div class="bubble from-user">Сколько негативных отзывов на этой неделе?<div class="ts">14:02</div></div>
+  <div class="bubble from-bot">За последние 7 дней: <strong>23 негативных</strong> отзыва из 248 (9.3%). Главная тема — «доставка опаздывает». Хотите посмотреть разбивку?<div class="ts">14:02</div></div>
+  <div class="thinking"><span class="d"></span><span class="d"></span><span class="d"></span></div>
+</div>
+</body></html>

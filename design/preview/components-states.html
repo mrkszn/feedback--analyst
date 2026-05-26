@@ -1,0 +1,23 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="_base.css"><title>States</title>
+<style>
+.grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; }
+.cell { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+.cell .h { font: 500 11px/14px var(--font-mono); color: var(--text-3); }
+.btn { height: 36px; padding: 0 14px; border-radius: 8px; font: 500 14px/20px var(--font-sans); cursor: pointer; border: 1px solid transparent; display:flex; align-items:center; justify-content:center; }
+.btn.def     { background: #7c3aed; color: white; border-color: #6d28d9; }
+.btn.hover   { background: #6d28d9; color: white; border-color: #6d28d9; }
+.btn.pressed { background: #5b21b6; color: white; border-color: #5b21b6; transform: scale(0.96); }
+.btn.focus   { background: #7c3aed; color: white; border-color: #6d28d9; outline: 2px solid color-mix(in oklch, #7c3aed 40%, transparent); outline-offset: 2px; }
+.btn.disabled { background: #7c3aed; color: white; border-color: #6d28d9; opacity: 0.4; }
+.note { margin-top: 12px; font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.kbd { font: 500 11px/14px var(--font-mono); background: var(--surface-2); padding: 2px 6px; border: 1px solid var(--border); border-radius: 4px; }
+</style></head>
+<body>
+<div class="grid">
+  <div class="cell"><div class="h">default</div><div class="btn def">Save</div></div>
+  <div class="cell"><div class="h">hover</div><div class="btn hover">Save</div></div>
+  <div class="cell"><div class="h">pressed · scale 0.96</div><div class="btn pressed">Save</div></div>
+  <div class="cell"><div class="h">focus ring</div><div class="btn focus">Save</div></div>
+</div>
+<div class="note">Disabled at opacity 0.4 · transitions 120 ms · easing <span class="kbd">cubic-bezier(0.2, 0, 0, 1)</span></div>
+</body></html>

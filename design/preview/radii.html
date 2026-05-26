@@ -1,0 +1,18 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="_base.css"><title>Radii</title>
+<style>
+.row { display: flex; gap: 16px; align-items: flex-end; }
+.r { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.r .box { width: 68px; height: 68px; background: var(--surface); border: 1px solid var(--border-strong); }
+.r .lbl { font: 600 12px/16px var(--font-sans); color: var(--text-1); }
+.r .hint{ font: 500 11px/14px var(--font-mono); color: var(--text-3); }
+</style></head>
+<body>
+<div class="row">
+  <div class="r"><div class="box" style="border-radius:4px"></div><div class="lbl">4</div><div class="hint">tag</div></div>
+  <div class="r"><div class="box" style="border-radius:6px"></div><div class="lbl">6</div><div class="hint">input</div></div>
+  <div class="r"><div class="box" style="border-radius:8px"></div><div class="lbl">8</div><div class="hint">button</div></div>
+  <div class="r"><div class="box" style="border-radius:12px"></div><div class="lbl">12</div><div class="hint">card</div></div>
+  <div class="r"><div class="box" style="border-radius:16px 16px 0 0"></div><div class="lbl">16</div><div class="hint">sheet</div></div>
+  <div class="r"><div class="box" style="border-radius:999px"></div><div class="lbl">999</div><div class="hint">pill</div></div>
+</div>
+</body></html>

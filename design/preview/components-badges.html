@@ -1,0 +1,38 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="_base.css"><title>Badges + chips</title>
+<style>
+.row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+.row:last-child { margin-bottom: 0; }
+.row .lbl { font: 500 11px/14px var(--font-mono); color: var(--text-3); width: 96px; flex-shrink: 0; }
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 4px; font: 600 11px/16px var(--font-sans); border: 1px solid transparent; }
+.b-success { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+.b-warning { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+.b-danger  { background: #fff1f2; color: #be123c; border-color: #fecdd3; }
+.b-info    { background: #f0f9ff; color: #0369a1; border-color: #bae6fd; }
+.b-neutral { background: var(--slate-100); color: var(--text-2); border-color: var(--border); }
+.b-primary { background: #ede9fe; color: #5b21b6; border-color: #c4b5fd; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 999px; font: 500 13px/18px var(--font-sans); background: var(--surface); border: 1px solid var(--border); color: var(--text-1); cursor: pointer; }
+.chip.active { background: var(--slate-900); color: white; border-color: var(--slate-900); }
+.chip .x { width: 14px; height: 14px; opacity: 0.6; }
+.dot { width: 6px; height: 6px; border-radius: 999px; }
+</style></head>
+<body>
+<div class="row"><span class="lbl">status</span>
+  <span class="badge b-success"><span class="dot" style="background:#10b981"></span>Live</span>
+  <span class="badge b-warning"><span class="dot" style="background:#f59e0b"></span>Needs review</span>
+  <span class="badge b-danger"><span class="dot" style="background:#f43f5e"></span>Error</span>
+  <span class="badge b-info">Beta</span>
+  <span class="badge b-neutral">Draft</span>
+  <span class="badge b-primary">Pro</span>
+</div>
+<div class="row"><span class="lbl">filter chips</span>
+  <span class="chip active">All</span>
+  <span class="chip">Positive</span>
+  <span class="chip">Negative</span>
+  <span class="chip">Today</span>
+  <span class="chip">7 days</span>
+</div>
+<div class="row"><span class="lbl">removable</span>
+  <span class="chip">metric: nps <svg class="x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
+  <span class="chip">range: last 30d <svg class="x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
+</div>
+</body></html>

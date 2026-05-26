@@ -1,0 +1,45 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="_base.css"><title>Buttons</title>
+<style>
+.btn { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: 8px; font: 500 14px/20px var(--font-sans); border: 1px solid transparent; cursor: pointer; transition: 120ms cubic-bezier(0.2,0,0,1); }
+.btn:hover { filter: none; }
+.btn-primary { background: #7c3aed; color: white; border-color: #6d28d9; box-shadow: inset 0 -1px 0 rgba(0,0,0,0.08); }
+.btn-primary:hover { background: #6d28d9; }
+.btn-secondary { background: white; color: var(--text-1); border-color: var(--border); }
+.btn-secondary:hover { background: var(--surface-hover); border-color: var(--border-strong); }
+.btn-ghost { background: transparent; color: var(--text-1); }
+.btn-ghost:hover { background: var(--surface-hover); }
+.btn-destructive { background: #e11d48; color: white; border-color: #be123c; }
+.btn-disabled { opacity: 0.4; pointer-events: none; }
+.btn-sm { height: 28px; padding: 0 10px; font-size: 13px; border-radius: 6px; }
+.btn-lg { height: 44px; padding: 0 18px; font-size: 15px; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+.row:last-child { margin-bottom: 0; }
+.row .lbl { font: 500 11px/14px var(--font-mono); color: var(--text-3); width: 90px; flex-shrink: 0; }
+svg { width: 16px; height: 16px; }
+</style></head>
+<body>
+<div class="row"><span class="lbl">primary</span>
+  <button class="btn btn-primary">Save</button>
+  <button class="btn btn-primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>New survey</button>
+  <button class="btn btn-primary btn-disabled">Disabled</button>
+</div>
+<div class="row"><span class="lbl">secondary</span>
+  <button class="btn btn-secondary">Cancel</button>
+  <button class="btn btn-secondary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Reply</button>
+  <button class="btn btn-secondary">Filter</button>
+</div>
+<div class="row"><span class="lbl">ghost</span>
+  <button class="btn btn-ghost">Skip</button>
+  <button class="btn btn-ghost">More</button>
+  <button class="btn btn-ghost btn-sm">Edit</button>
+</div>
+<div class="row"><span class="lbl">destructive</span>
+  <button class="btn btn-destructive">Delete</button>
+  <button class="btn btn-destructive btn-sm">Remove</button>
+</div>
+<div class="row"><span class="lbl">sizes</span>
+  <button class="btn btn-primary btn-sm">Small · 28</button>
+  <button class="btn btn-primary">Default · 36</button>
+  <button class="btn btn-primary btn-lg">Large · 44</button>
+</div>
+</body></html>

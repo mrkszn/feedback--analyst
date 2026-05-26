@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Voice · Admin — UI kit</title>
+<link rel="stylesheet" href="../../colors_and_type.css"/>
+<style>
+  html, body { margin: 0; background: #e8edf5; min-height: 100vh; }
+  body { display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+  #stage { position: relative; }
+  /* Phone frame */
+  .phone {
+    width: 390px; height: 780px; border-radius: 44px;
+    background: #0f172a; padding: 12px;
+    box-shadow: 0 30px 60px -20px rgba(15,23,42,0.35), 0 2px 0 rgba(255,255,255,0.04) inset;
+  }
+  .screen {
+    width: 100%; height: 100%; border-radius: 32px; overflow: hidden;
+    background: var(--bg); position: relative;
+  }
+  /* Telegram-style top chrome bar */
+  .tg-chrome {
+    height: 36px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 12px; background: #fff; border-bottom: 1px solid #e2e8f0;
+    font-family: Geist, system-ui, sans-serif; font-size: 13px; color: #475569;
+  }
+  .tg-chrome .l, .tg-chrome .r { display: flex; align-items: center; gap: 6px; }
+  .tg-chrome .title { font-weight: 600; color: #0f172a; }
+  .tg-dot { width: 6px; height: 6px; border-radius: 999px; background: #10b981; }
+  .notch {
+    position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+    width: 110px; height: 26px; background: #0f172a; border-radius: 999px; z-index: 2;
+  }
+  .side-label {
+    position: absolute; left: calc(50% + 220px); top: 50%;
+    transform: translateY(-50%); max-width: 280px;
+    font-family: Geist, system-ui, sans-serif; color: #475569;
+  }
+  .side-label h1 { font-size: 18px; line-height: 24px; margin: 0 0 6px; color: #0f172a; font-weight: 600; letter-spacing: -0.005em; }
+  .side-label p  { font-size: 13px; line-height: 18px; margin: 0; }
+  .side-label .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #ede9fe; color: #5b21b6;
+                       font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 10px; }
+  @media (max-width: 900px) { .side-label { display: none; } }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="phone">
+    <div class="screen">
+      <div class="tg-chrome">
+        <div class="l"><span>9:41</span></div>
+        <div class="title">Voice · Admin</div>
+        <div class="r"><span class="tg-dot"></span><span>WebApp</span></div>
+      </div>
+      <div id="root" style="height: calc(100% - 36px);"></div>
+    </div>
+  </div>
+  <div class="side-label">
+    <span class="pill">UI kit</span>
+    <h1>Voice / Admin Mini App</h1>
+    <p>Interactive prototype of the six template screens. Tap a tab to switch · tap a feedback row or a client to open a detail sheet.</p>
+  </div>
+</div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="components.jsx"></script>
+<script type="text/babel" src="data.jsx"></script>
+<script type="text/babel" src="screens/Dashboard.jsx"></script>
+<script type="text/babel" src="screens/Metrics.jsx"></script>
+<script type="text/babel" src="screens/Topics.jsx"></script>
+<script type="text/babel" src="screens/Clients.jsx"></script>
+<script type="text/babel" src="screens/Ask.jsx"></script>
+<script type="text/babel" src="miniapp.jsx"></script>
+<script type="text/babel">
+  // Wait for all babel scripts to register globals.
+  function tryMount() {
+    if (!window.MiniApp) return setTimeout(tryMount, 30);
+    ReactDOM.createRoot(document.getElementById('root')).render(<MiniApp/>);
+  }
+  tryMount();
+</script>
+</body>
+</html>

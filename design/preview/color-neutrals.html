@@ -1,0 +1,38 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="_base.css"><title>Neutrals</title>
+<style>
+.scale { display: grid; grid-template-columns: repeat(11, 1fr); gap: 0; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+.swatch { aspect-ratio: 1 / 1.2; display: flex; align-items: flex-end; padding: 6px; }
+.swatch span { font: 500 10px/12px var(--font-mono); }
+.dl { color: rgba(0,0,0,0.6); }
+.lt { color: rgba(255,255,255,0.9); }
+.tokens { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; margin-top: 14px; }
+.tok { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; }
+.tok .name { font: 600 11px/14px var(--font-mono); color: var(--text-1); }
+.tok .hint { font: 400 11px/14px var(--font-mono); color: var(--text-3); }
+.dot { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 6px; border: 1px solid rgba(0,0,0,0.08); }
+</style></head>
+<body>
+<div class="scale">
+  <div class="swatch" style="background:#f8fafc"><span class="dl">50</span></div>
+  <div class="swatch" style="background:#f1f5f9"><span class="dl">100</span></div>
+  <div class="swatch" style="background:#e9eef5"><span class="dl">150</span></div>
+  <div class="swatch" style="background:#e2e8f0"><span class="dl">200</span></div>
+  <div class="swatch" style="background:#cbd5e1"><span class="dl">300</span></div>
+  <div class="swatch" style="background:#94a3b8"><span class="lt">400</span></div>
+  <div class="swatch" style="background:#64748b"><span class="lt">500</span></div>
+  <div class="swatch" style="background:#475569"><span class="lt">600</span></div>
+  <div class="swatch" style="background:#334155"><span class="lt">700</span></div>
+  <div class="swatch" style="background:#1e293b"><span class="lt">800</span></div>
+  <div class="swatch" style="background:#0f172a"><span class="lt">900</span></div>
+</div>
+<div class="tokens">
+  <div class="tok"><div class="name"><span class="dot" style="background:#f8fafc"></span>--bg</div></div>
+  <div class="tok"><div class="name"><span class="dot" style="background:#ffffff"></span>--surface</div></div>
+  <div class="tok"><div class="name"><span class="dot" style="background:#e2e8f0"></span>--border</div></div>
+  <div class="tok"><div class="name"><span class="dot" style="background:#cbd5e1"></span>--border-strong</div></div>
+  <div class="tok"><div class="name"><span class="dot" style="background:#0f172a"></span>--text-1</div></div>
+  <div class="tok"><div class="name"><span class="dot" style="background:#475569"></span>--text-2</div></div>
+  <div class="tok"><div class="name"><span class="dot" style="background:#64748b"></span>--text-3</div></div>
+  <div class="tok"><div class="name"><span class="dot" style="background:#94a3b8"></span>--text-disabled</div></div>
+</div>
+</body></html>

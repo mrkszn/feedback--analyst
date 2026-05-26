@@ -1,0 +1,48 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="_base.css"><title>KPI cards</title>
+<style>
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+.kpi .top { display: flex; align-items: center; justify-content: space-between; }
+.kpi .label { font: 500 12px/16px var(--font-sans); color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; }
+.kpi .ic { width: 14px; height: 14px; color: var(--text-3); }
+.kpi .num { font: 600 26px/30px var(--font-mono); color: var(--text-1); letter-spacing: -0.01em; margin-top: 8px; }
+.kpi .footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+.delta { display: inline-flex; align-items: center; gap: 4px; font: 500 12px/16px var(--font-mono); }
+.up { color: #059669; }
+.dn { color: #e11d48; }
+.flat { color: #b45309; }
+.sub { font: 400 12px/16px var(--font-sans); color: var(--text-3); }
+.spark { width: 60px; height: 22px; }
+</style></head>
+<body>
+<div class="grid">
+  <div class="kpi">
+    <div class="top"><div class="label">Feedback · 7d</div><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+    <div class="num">1 248</div>
+    <div class="footer"><span class="delta up">▲ 18.4%</span>
+      <svg class="spark" viewBox="0 0 60 22" fill="none" stroke="#059669" stroke-width="1.5"><polyline points="0,16 8,14 16,15 24,11 32,12 40,8 48,9 60,4"/></svg>
+    </div>
+  </div>
+  <div class="kpi">
+    <div class="top"><div class="label">Sentiment</div><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></div>
+    <div class="num">0.78</div>
+    <div class="footer"><span class="delta up">▲ 0.04</span>
+      <svg class="spark" viewBox="0 0 60 22" fill="none" stroke="#059669" stroke-width="1.5"><polyline points="0,12 12,10 24,11 36,7 48,8 60,5"/></svg>
+    </div>
+  </div>
+  <div class="kpi">
+    <div class="top"><div class="label">Sessions</div><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+    <div class="num">3 091</div>
+    <div class="footer"><span class="delta flat">● ±0.0%</span>
+      <svg class="spark" viewBox="0 0 60 22" fill="none" stroke="#94a3b8" stroke-width="1.5"><polyline points="0,11 12,11 24,12 36,10 48,11 60,11"/></svg>
+    </div>
+  </div>
+  <div class="kpi">
+    <div class="top"><div class="label">Drop-off</div><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+    <div class="num">12.3%</div>
+    <div class="footer"><span class="delta dn">▼ 2.1%</span>
+      <svg class="spark" viewBox="0 0 60 22" fill="none" stroke="#e11d48" stroke-width="1.5"><polyline points="0,4 12,6 24,5 36,9 48,10 60,14"/></svg>
+    </div>
+  </div>
+</div>
+</body></html>

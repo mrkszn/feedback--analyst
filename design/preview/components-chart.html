@@ -1,0 +1,31 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="_base.css"><title>Chart</title>
+<style>
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+.card .top { display:flex; align-items:center; justify-content:space-between; margin-bottom: 10px; }
+.card .lbl { font: 500 12px/16px var(--font-sans); color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; }
+.card .num { font: 600 18px/22px var(--font-mono); color: var(--text-1); }
+svg.line { width: 100%; height: 110px; display: block; }
+.legend { display: flex; gap: 12px; margin-top: 6px; font: 500 12px/16px var(--font-sans); color: var(--text-2); }
+.legend .sw { width: 8px; height: 8px; border-radius: 2px; display: inline-block; margin-right: 6px; vertical-align: 0; }
+.bars { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.barwrap { display: flex; flex-direction: column; gap: 6px; }
+.bar { display: flex; align-items: center; gap: 8px; }
+.bar .nm { width: 110px; font: 500 12px/16px var(--font-sans); color: var(--text-2); }
+.bar .bg { flex: 1; height: 8px; background: var(--slate-100); border-radius: 999px; overflow: hidden; }
+.bar .fill { height: 100%; background: var(--violet-600); border-radius: 999px; }
+.bar .n { width: 32px; text-align: right; font: 500 12px/16px var(--font-mono); color: var(--text-1); }
+</style></head>
+<body>
+<div class="card">
+  <div class="top"><span class="lbl">Sentiment · last 14d</span><span class="num">0.78</span></div>
+  <svg class="line" viewBox="0 0 600 110" preserveAspectRatio="none">
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7c3aed" stop-opacity="0.22"/><stop offset="1" stop-color="#7c3aed" stop-opacity="0"/></linearGradient>
+    </defs>
+    <g stroke="#e2e8f0" stroke-width="1"><line x1="0" y1="22" x2="600" y2="22"/><line x1="0" y1="55" x2="600" y2="55"/><line x1="0" y1="88" x2="600" y2="88"/></g>
+    <path d="M0,72 L45,68 L90,76 L135,55 L180,60 L225,42 L270,48 L315,34 L360,40 L405,26 L450,32 L495,22 L540,28 L600,18 L600,110 L0,110 Z" fill="url(#g)"/>
+    <path d="M0,72 L45,68 L90,76 L135,55 L180,60 L225,42 L270,48 L315,34 L360,40 L405,26 L450,32 L495,22 L540,28 L600,18" fill="none" stroke="#7c3aed" stroke-width="2"/>
+  </svg>
+  <div class="legend"><span><span class="sw" style="background:#7c3aed"></span>Sentiment</span></div>
+</div>
+</body></html>
