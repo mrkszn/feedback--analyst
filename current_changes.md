@@ -1,4 +1,99 @@
-# Current Changes — 2026-05-26 (autonomous session phase-2a-6)
+# Current Changes — 2026-05-26 (autonomous session phase-3)
+
+## Session summary
+
+- **Branch:** `autonomous/20260526-1234` (NOT main). Pre-session tag: `pre-autonomous-20260526-1234`.
+- **Phase:** 3 — Admin Analytics Backend (no Mini App, no HTTP API — Phase 4).
+- **Commits added this session: 8/8** — all atomic, all green.
+- **Tests:** **315 passing** (up from 246 baseline, +69 new). `ruff check .` clean. `mypy .` clean (96 source files).
+
+## What landed (commits, oldest → newest)
+
+```
+7a80b8d  feat(bots): popup command menu via set_my_commands                     (#1)
+416e647  feat(integrations): pinecone query_similar_sessions helper             (#2)
+6509ffe  feat(services): analytics aggregate_metric + topic_histogram + summary_overview  (#3)
+9fad194  feat(services): analytics semantic_search + client_profile             (#4)
+818c18c  feat(agent): admin_ask node with tool-calling over analytics           (#5)
+ec9c396  feat(bot-admin): /insights /metric /topics analytics commands          (#6)
+702be83  feat(bot-admin): /find /clients analytics commands                     (#7)
+2f5ead5  feat(bot-admin): /ask natural-language via admin_ask agent             (#8)
+```
+
+### Per-commit highlights
+
+- **#1** — `GUEST_COMMANDS`/`ADMIN_COMMANDS` module-level `list[BotCommand]` consts + `await bot.set_my_commands(...)` in both `__main__.py`. Guest popup: /start, /cancel. Admin baseline popup: /start, /claim, /questions, /add_question, /edit_question, /delete_question, /invite_admin. (Phase-3 commands appended in #8.) Tests assert required keys + length-cap for popup UI.
+- **#2** — `query_similar_sessions(vector, top_k, namespace, metadata_filter)` in `integrations/pinecone.py` — reuses retry policy from upsert, returns flat `list[PineconeMatch]` (session_id, client_id, score, metadata) for JOIN with Supabase. Handles both dict-shaped and object-shaped Pinecone responses.
+- **#3** — `services/analytics.py`: `aggregate_metric(metric_key, date_from, date_to, group_by)`, `topic_histogram(date_from, date_to, sentiment_filter)`, `summary_overview(date_from, date_to)`. In-memory aggregation over JSONB (Supabase REST doesn't have a good GROUP BY surface). Helpers `_bucket_for` (day/week/none) and `_coerce_numeric` (int/bool/float/str/`{"value": …}` JSONB shapes).
+- **#4** — `semantic_search(query_text, top_k)` chains `embed_text → query_similar_sessions → JOIN sessions+client_cards via Supabase`, returning `SemanticHit` with `summary_text` + sentiment + started_at. `client_profile(telegram_id)` returns sessions count, last session date, avg sentiment, top topics, recent N cards. Both use parallel `asyncio.gather` for the two Supabase calls.
+- **#5** — `agent/nodes/admin_ask.py::answer_admin_question(question_text, history) -> AdminAnswer`. Bounded 5-round LLM tool-loop bound to 5 analytics tools (`tools/admin_analytics_tools.py`). System prompt: professional-warm, max 1 emoji, no guest-style. `_split_chart` extracts any LLM-emitted ```...``` code-block into `chart_text` so the bot handler can render it as Markdown monospace.
+- **#6** — `bot_admin/handlers/analytics_commands.py` registered in `__main__.py` BEFORE `fallback` (router order test asserts this). `/insights [days]` → dashboard; `/metric <key> [days]` → ASCII table in Markdown code-block; `/topics [days]` → top-5 positive + top-5 negative. `_parse_days` validates 1 ≤ N ≤ 365.
+- **#7** — `/find <query>` → `semantic_search(top_k=10)` with date/sentiment/score/client + 160-char snippet per hit. `/clients <telegram_id>` → `client_profile` profile card. ValueError/LookupError surfaced as human text (no traceback to admin).
+- **#8** — `/ask <вопрос>` → `answer_admin_question(text)` → renders `answer_text` + optional `chart_text` (Markdown). `ADMIN_COMMANDS` popup-меню расширен: /ask, /insights, /metric, /topics, /find, /clients.
+
+## New files
+
+- `services/analytics.py`
+- `agent/nodes/admin_ask.py`
+- `tools/admin_analytics_tools.py`
+- `bot_admin/handlers/analytics_commands.py`
+- `tests/test_bot_commands_popup.py`
+- `tests/test_integrations_pinecone_query.py`
+- `tests/test_services_analytics.py`
+- `tests/test_services_analytics_search.py`
+- `tests/test_admin_ask.py`
+- `tests/test_admin_analytics_commands.py`
+- `tests/test_admin_analytics_find_clients.py`
+- `tests/test_admin_ask_command.py`
+
+## Changed files
+
+- `bot_guest/__main__.py` — `GUEST_COMMANDS` const + `set_my_commands` call
+- `bot_admin/__main__.py` — `ADMIN_COMMANDS` const + `set_my_commands` + register `analytics_commands.router` between `admin_question_dialog` and `fallback`
+- `integrations/pinecone.py` — added `query_similar_sessions` + `PineconeMatch` TypedDict
+
+## Architectural invariant preserved
+
+- bot ↔ services ↔ agent — все вызовы in-process Python imports. **Никакого FastAPI / HTTP / auth слоя** (это Phase 4).
+- Dialogue → vector (Pinecone client-cards namespace); interview → SQL (session_answers.marked_value). Этот контракт из плана не нарушался.
+- Никаких изменений в `agent/nodes/admin_assistant.py` или `bot_admin/handlers/admin_agent.py` (Phase 2A.6 admin agent живёт без изменений; `admin_ask` — это отдельный узел).
+- Никаких миграций БД (Phase 3 не требовал новых колонок).
+
+## Verification
+
+- `uv run pytest -q` → 315 passed in 1.78s
+- `uv run ruff check .` → All checks passed!
+- `uv run mypy .` → Success: no issues found in 96 source files
+
+## Deferred / known issues
+
+- **Integration smoke на dev-БД** не выполнен в этой сессии (нет credentials в autonomous env). Запустить вручную перед merge.
+- **LLM-prompt tuning admin_ask** — system prompt написан по best-guess; после первых живых вопросов админа может потребоваться доработка (примеры в few-shot, более явные правила выбора tools).
+- **Pinecone namespace** в `semantic_search` берётся дефолтный из `settings.pinecone_namespace` — если для analytics нужен отдельный namespace (например `client-cards-analytics`), это **не блокер**, сейчас читаем тот же где пишем при upsert.
+- **conversation_history в /ask** — handler не пробрасывает историю (FSM не используется для /ask). Если потребуется multi-turn /ask — нужен FSM-state или storage, это отдельная итерация.
+
+## Branch state
+
+```
+Branch:  autonomous/20260526-1234
+Pre-tag: pre-autonomous-20260526-1234
+
+После сессии человек выполнит ОДНО из:
+  # принять работу:
+  git checkout main && git merge --no-ff autonomous/20260526-1234
+
+  # отбросить:
+  git checkout main && git branch -D autonomous/20260526-1234 && git tag -d pre-autonomous-20260526-1234
+
+  # аварийный сброс main до состояния до сессии:
+  git checkout main && git reset --hard pre-autonomous-20260526-1234
+```
+
+---
+
+## Archived sessions
+
+### Phase 2A.6 (2026-05-26) — Admin UX revamp + guest finalize UX
 
 ## Session summary
 

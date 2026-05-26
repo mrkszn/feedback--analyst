@@ -4,21 +4,19 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.types import ReplyKeyboardMarkup
 
-from bot_admin.handlers.auth import (
-    admin_menu_admins,
-    admin_menu_ask,
-    admin_start,
-)
+from bot_admin.handlers.auth import admin_menu_admins, admin_start
 from bot_admin.keyboards import (
     BTN_ADD_QUESTION,
     BTN_ADMINS,
-    BTN_ASK,
+    BTN_MODE_ADMIN,
+    BTN_MODE_ANALYTICS,
     BTN_QUESTIONS,
     main_menu_keyboard,
+    mode_toggle_label,
 )
 
 
-def test_main_menu_keyboard_layout() -> None:
+def test_main_menu_keyboard_default_admin_mode() -> None:
     kb = main_menu_keyboard()
     assert isinstance(kb, ReplyKeyboardMarkup)
     assert kb.resize_keyboard is True
@@ -26,16 +24,31 @@ def test_main_menu_keyboard_layout() -> None:
     rows = kb.keyboard
     assert len(rows) == 2
     assert [b.text for b in rows[0]] == [BTN_QUESTIONS, BTN_ADD_QUESTION]
-    assert [b.text for b in rows[1]] == [BTN_ASK, BTN_ADMINS]
+    # In admin mode the toggle button offers to SWITCH to analytics.
+    assert [b.text for b in rows[1]] == [BTN_MODE_ANALYTICS, BTN_ADMINS]
+
+
+def test_main_menu_keyboard_analytics_mode() -> None:
+    kb = main_menu_keyboard(current_mode="analytics")
+    rows = kb.keyboard
+    # In analytics mode the toggle button offers to SWITCH back to admin.
+    assert [b.text for b in rows[1]] == [BTN_MODE_ADMIN, BTN_ADMINS]
+
+
+def test_mode_toggle_label_inverts() -> None:
+    assert mode_toggle_label("admin") == BTN_MODE_ANALYTICS
+    assert mode_toggle_label("analytics") == BTN_MODE_ADMIN
 
 
 async def test_admin_start_attaches_keyboard_for_admin() -> None:
     message = MagicMock()
     message.from_user = MagicMock(id=1)
     message.answer = AsyncMock()
+    state = MagicMock()
+    state.get_data = AsyncMock(return_value={})
 
     with patch("bot_admin.handlers.auth.is_admin", new=AsyncMock(return_value=True)):
-        await admin_start(message)
+        await admin_start(message, state)
 
     message.answer.assert_awaited_once()
     args, kwargs = message.answer.await_args
@@ -43,25 +56,33 @@ async def test_admin_start_attaches_keyboard_for_admin() -> None:
     assert isinstance(kwargs.get("reply_markup"), ReplyKeyboardMarkup)
 
 
+async def test_admin_start_keyboard_respects_existing_mode() -> None:
+    message = MagicMock()
+    message.from_user = MagicMock(id=1)
+    message.answer = AsyncMock()
+    state = MagicMock()
+    state.get_data = AsyncMock(return_value={"admin_mode": "analytics"})
+
+    with patch("bot_admin.handlers.auth.is_admin", new=AsyncMock(return_value=True)):
+        await admin_start(message, state)
+
+    kb = message.answer.await_args.kwargs["reply_markup"]
+    assert [b.text for b in kb.keyboard[1]] == [BTN_MODE_ADMIN, BTN_ADMINS]
+
+
 async def test_admin_start_no_keyboard_for_non_admin() -> None:
     message = MagicMock()
     message.from_user = MagicMock(id=2)
     message.answer = AsyncMock()
+    state = MagicMock()
+    state.get_data = AsyncMock(return_value={})
 
     with patch("bot_admin.handlers.auth.is_admin", new=AsyncMock(return_value=False)):
-        await admin_start(message)
+        await admin_start(message, state)
 
     args, kwargs = message.answer.await_args
     assert "не админ" in args[0].lower()
     assert "reply_markup" not in kwargs
-
-
-async def test_button_ask_returns_placeholder() -> None:
-    message = MagicMock()
-    message.answer = AsyncMock()
-    await admin_menu_ask(message)
-    text = message.answer.await_args.args[0]
-    assert "ассистент" in text.lower() or "скоро" in text.lower()
 
 
 async def test_button_admins_returns_invite_hint() -> None:

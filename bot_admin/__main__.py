@@ -3,16 +3,35 @@ import logging
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import BotCommand
 
 from bot_admin.handlers import (
     admin_question_dialog,
+    analytics_commands,
     auth,
     fallback,
+    mode,
     question_voice,
     questions,
 )
 from bot_common.middleware import TypingMiddleware
 from config import settings
+
+ADMIN_COMMANDS: list[BotCommand] = [
+    BotCommand(command="start", description="Начать"),
+    BotCommand(command="claim", description="Привязать админа"),
+    BotCommand(command="questions", description="Показать вопросы"),
+    BotCommand(command="add_question", description="Добавить вопрос"),
+    BotCommand(command="edit_question", description="Изменить вопрос"),
+    BotCommand(command="delete_question", description="Удалить вопрос"),
+    BotCommand(command="invite_admin", description="Пригласить ещё одного админа"),
+    BotCommand(command="ask", description="Спросить аналитику в свободной форме"),
+    BotCommand(command="insights", description="Сводка за период"),
+    BotCommand(command="metric", description="Динамика метрики"),
+    BotCommand(command="topics", description="Топ-топики (±)"),
+    BotCommand(command="find", description="Семантический поиск по сессиям"),
+    BotCommand(command="clients", description="Профиль клиента по ID"),
+]
 
 
 async def main() -> None:
@@ -21,6 +40,7 @@ async def main() -> None:
         raise RuntimeError("TELEGRAM_ADMIN_BOT_TOKEN is not set")
 
     bot = Bot(token=settings.telegram_admin_bot_token)
+    await bot.set_my_commands(ADMIN_COMMANDS)
     dp = Dispatcher(storage=MemoryStorage())
     # Все message-хэндлеры получают «бот печатает» автоматически —
     # видно когда идёт DB-call. См. bot_common/middleware.py.
@@ -29,6 +49,11 @@ async def main() -> None:
     dp.include_router(questions.router)
     dp.include_router(question_voice.router)
     dp.include_router(admin_question_dialog.router)
+    # mode-toggle (📊/🛠) ловит точный F.text перед fallback'ом.
+    dp.include_router(mode.router)
+    # analytics-команды должны срабатывать раньше fallback (LLM agent), чтобы
+    # /insights /metric /topics /find /clients /ask не уходили в admin_agent.
+    dp.include_router(analytics_commands.router)
     dp.include_router(fallback.router)
 
     await dp.start_polling(bot)
