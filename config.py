@@ -32,6 +32,13 @@ class Settings(BaseSettings):
 
     restaurant_context: str = ""
 
+    # HTTP API (Phase 4A) — JWT secret для admin Mini App сессий; пустая строка
+    # = API в режиме fail-loud (issue/verify_token поднимут RuntimeError).
+    mini_app_session_secret: str = ""
+    # CORS allowlist для admin Mini App (comma-separated origins). Пусто = CORS
+    # отключён. Никогда не используем "*", это явный allowlist.
+    allowed_mini_app_origins: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
