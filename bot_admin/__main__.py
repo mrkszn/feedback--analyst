@@ -4,7 +4,13 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from bot_admin.handlers import auth, fallback, question_voice, questions
+from bot_admin.handlers import (
+    admin_question_dialog,
+    auth,
+    fallback,
+    question_voice,
+    questions,
+)
 from bot_common.middleware import TypingMiddleware
 from config import settings
 
@@ -22,6 +28,7 @@ async def main() -> None:
     dp.include_router(auth.router)
     dp.include_router(questions.router)
     dp.include_router(question_voice.router)
+    dp.include_router(admin_question_dialog.router)
     dp.include_router(fallback.router)
 
     await dp.start_polling(bot)

@@ -94,6 +94,51 @@ async def delete_question(
         raise LookupError(f"question {question_id} not found")
 
 
+async def deactivate_all_questions(
+    *,
+    restaurant_id: UUID | str | None = None,
+    db: Client | None = None,
+) -> int:
+    """Soft-delete (set is_active=false) для всех активных вопросов.
+
+    Возвращает количество затронутых строк. История ответов сохраняется —
+    деактивация не каскадит. `restaurant_id` пока зарезервирован под
+    будущий multi-tenant (схема единственного ресторана сейчас).
+    """
+    db = db or get_supabase()
+
+    def _q() -> Any:
+        q = db.table("questions").update({"is_active": False}).eq("is_active", True)
+        if restaurant_id is not None:
+            q = q.eq("restaurant_id", str(restaurant_id))
+        return q.execute()
+
+    resp = await asyncio.to_thread(_q)
+    return len(resp.data or [])
+
+
+async def find_question_by_text(
+    query: str,
+    *,
+    active_only: bool = True,
+    db: Client | None = None,
+) -> list[QuestionRow]:
+    """Поиск вопросов по подстроке (ILIKE) в text или metric_key."""
+    if not query.strip():
+        return []
+    db = db or get_supabase()
+    pattern = f"%{query.strip()}%"
+
+    def _q() -> Any:
+        q = db.table("questions").select("*")
+        if active_only:
+            q = q.eq("is_active", True)
+        return q.or_(f"text.ilike.{pattern},metric_key.ilike.{pattern}").execute()
+
+    resp = await asyncio.to_thread(_q)
+    return list(resp.data or [])
+
+
 async def list_questions(
     *,
     active_only: bool = False,

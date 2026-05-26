@@ -153,7 +153,7 @@ Agent({team_name: "fn-<slug>", name: "reviewer",    subagent_type: "Explore",   
    - `git status -uall` (full report включая untracked)
    - `git diff --stat` (что в модификациях)
    - Если есть untracked файлы или зелёные тесты на WIP → **закоммитить wip-коммитом**, не сбрасывать
-3. Обнови / создай `current_changes.md` в корне `telegram-waiter/` с финальным отчётом по Phase 2A (формат — как у прошлой сессии: что закончено N/4, blocked, decisions, outstanding questions, next milestone).
+3. Обнови `current_changes.md` в корне `telegram-waiter/` с финальным отчётом по Phase 2A (формат — как у прошлой сессии: что закончено N/4, blocked, decisions, outstanding questions, next milestone). **🚨 APPEND-ONLY:** новый отчёт ставится в начало файла (выше существующих секций), старые сессии **сохраняются** под `## Archived sessions`. Никогда не перезаписывай файл целиком — иначе теряются уроки прошлых сессий. Демоутни прошлый H1 в H3 при архивации.
 4. `git add current_changes.md && git commit -m "docs: Phase 2A autonomous session — <N>/4 commands completed"`
 5. **Push НЕ делай** — это человек.
 6. Финальный отчёт в stdout:

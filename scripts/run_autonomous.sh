@@ -19,7 +19,7 @@
 set -euo pipefail
 
 MODE="${1:-}"
-if [[ "$MODE" != "--headless" && "$MODE" != "--interactive" && "$MODE" != "--smoke" && "$MODE" != "--phase-2a" ]]; then
+if [[ "$MODE" != "--headless" && "$MODE" != "--interactive" && "$MODE" != "--smoke" && "$MODE" != "--phase-2a" && "$MODE" != "--phase-2a-6" ]]; then
     cat <<EOF
 Usage: $0 <mode> [--resume <branch>]
   mode:
@@ -27,6 +27,7 @@ Usage: $0 <mode> [--resume <branch>]
     --headless     → 2h автономной сессии через claude -p, выходит после отчёта
     --smoke        → короткий wet-run (5 мин) для проверки инфры
     --phase-2a     → Phase 2A: orchestrator-промт (4 команды Admin Conversational MVP)
+    --phase-2a-6   → Phase 2A.6: admin UX revamp + guest finalize UX (7 коммитов)
   --resume <branch> (опционально):
     Продолжить работу на существующей autonomous/* ветке (например, после
     permission-denial во время прошлой сессии). НЕ создаёт новый tag/branch.
@@ -50,6 +51,11 @@ case "$MODE" in
         PROMPT_FILE="$PROJECT_ROOT/scripts/phase_2a_prompt.md"
         # Phase 2A — это interactive по природе (4 команды + wind-down + ожидание).
         # Внутрь inner.sh летит MODE=--interactive, чтобы там сработала ветка claude (не -p).
+        MODE="--interactive"
+        ;;
+    --phase-2a-6)
+        PROMPT_FILE="$PROJECT_ROOT/scripts/phase_2a_6_prompt.md"
+        # Phase 2A.6 — interactive (6 оставшихся коммитов после уже-сделанного #1).
         MODE="--interactive"
         ;;
     *)
