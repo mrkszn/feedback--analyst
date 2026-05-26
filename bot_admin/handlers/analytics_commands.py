@@ -20,6 +20,8 @@ from aiogram.types import Message
 from bot_admin.handlers.questions import require_admin
 from services.analytics import (
     aggregate_metric,
+    client_profile,
+    semantic_search,
     summary_overview,
     topic_histogram,
 )
@@ -140,4 +142,76 @@ async def cmd_topics(message: Message, command: CommandObject) -> None:
     neg_lines = "\n".join(f"  • {t['topic']} (n={t['count']})" for t in neg[:5]) or "  —"
     await message.answer(
         f"🏷 Топики за {days} дн.\n\nПоложительные:\n{pos_lines}\n\nОтрицательные:\n{neg_lines}"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# /find <natural query>
+
+
+@router.message(Command("find"))
+async def cmd_find(message: Message, command: CommandObject) -> None:
+    if not await require_admin(message):
+        return
+    query = (command.args or "").strip()
+    if not query:
+        await message.answer("Использование: /find <natural query>")
+        return
+    try:
+        hits = await semantic_search(query, top_k=10)
+    except ValueError as exc:
+        await message.answer(f"Поиск не удался: {exc}")
+        return
+    if not hits:
+        await message.answer(f"По запросу «{query}» похожих сессий не нашёл.")
+        return
+
+    lines = [f"🔎 Похожие сессии для «{query}» (top {len(hits)}):\n"]
+    for i, h in enumerate(hits, 1):
+        snippet = (h["summary_text"] or "").strip().replace("\n", " ")[:160]
+        sent = h["sentiment"] or "—"
+        date = (h["started_at"] or "")[:10]
+        client = h["client_id"] if h["client_id"] is not None else "—"
+        lines.append(
+            f"{i}. [{date}] sentiment={sent} score={h['score']:.2f} client={client}\n   {snippet}"
+        )
+    await message.answer("\n".join(lines))
+
+
+# --------------------------------------------------------------------------- #
+# /clients <telegram_id>
+
+
+@router.message(Command("clients"))
+async def cmd_clients(message: Message, command: CommandObject) -> None:
+    if not await require_admin(message):
+        return
+    arg = (command.args or "").strip()
+    if not arg:
+        await message.answer("Использование: /clients <telegram_id>")
+        return
+    try:
+        telegram_id = int(arg)
+    except ValueError:
+        await message.answer(f"telegram_id должен быть числом, не {arg!r}.")
+        return
+    try:
+        p = await client_profile(telegram_id)
+    except LookupError:
+        await message.answer(f"Клиент {telegram_id} не найден.")
+        return
+
+    name = p["name"] or "(без имени)"
+    topics = "\n".join(f"  • {t['topic']} (n={t['count']})" for t in p["top_topics"][:5]) or "  —"
+    cards = (
+        "\n".join(f"  • {(c.get('summary_text') or '').strip()[:200]}" for c in p["recent_cards"])
+        or "  (карточек ещё нет)"
+    )
+    await message.answer(
+        f"👤 {name} (id={telegram_id})\n\n"
+        f"Сессий: {p['sessions_count']}\n"
+        f"Последняя: {p['last_session_at'] or '—'}\n"
+        f"Avg sentiment: {_fmt_sentiment(p['avg_sentiment'])}\n\n"
+        f"Топ-топики:\n{topics}\n\n"
+        f"Recent cards:\n{cards}"
     )
