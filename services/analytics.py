@@ -70,6 +70,21 @@ class ClientProfile(TypedDict):
     top_topics: list[TopicCount]
 
 
+class CategoryCount(TypedDict):
+    value: str
+    count: int
+    pct: float
+
+
+class CategoricalDistribution(TypedDict):
+    metric_key: str
+    expected_type: str
+    total: int
+    categories: list[CategoryCount]
+    unknown: int  # answers whose marked_value didn't match any enum_value
+    enum_values: list[str] | None  # canonical list from questions.enum_values
+
+
 # --------------------------------------------------------------------------- #
 # helpers
 
@@ -102,6 +117,27 @@ def _coerce_numeric(value: Any) -> float | None:
             return float(value)
         except ValueError:
             return None
+    return None
+
+
+def _coerce_categorical(value: Any) -> str | None:
+    """Extract a categorical label from JSONB marked_value.
+
+    For enum/boolean questions `marked_value` is shaped as `{"value": "..."}`
+    or a bare scalar. Returns the string label (booleans become "true"/"false")
+    or None if the value is empty.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int | float):
+        return str(value)
+    if isinstance(value, dict):
+        return _coerce_categorical(value.get("value"))
+    if isinstance(value, str):
+        v = value.strip()
+        return v or None
     return None
 
 
@@ -182,6 +218,123 @@ async def aggregate_metric(
             )
         )
     return out
+
+
+# --------------------------------------------------------------------------- #
+# categorical_distribution
+
+
+async def categorical_distribution(
+    metric_key: str,
+    date_from: datetime,
+    date_to: datetime,
+    *,
+    db: Client | None = None,
+) -> CategoricalDistribution:
+    """Распределение ответов по категориям для одного `metric_key`.
+
+    Работает для enum и boolean вопросов (где marked_value — категориальная
+    величина, а не число). Возвращает `categories` с count + pct для каждой
+    встретившейся категории. Если у вопроса задан `enum_values`, категории
+    выстраиваются в порядке этого списка + категории не из enum попадают в
+    `unknown` (rare; means extractor returned a value not in enum_values).
+    """
+    if not metric_key.strip():
+        raise ValueError("metric_key must not be empty")
+    if date_from > date_to:
+        raise ValueError("date_from must be <= date_to")
+
+    db = db or get_supabase()
+
+    def _q_question() -> Any:
+        return (
+            db.table("questions")
+            .select("id, metric_key, expected_type, enum_values")
+            .eq("metric_key", metric_key)
+            .limit(1)
+            .execute()
+        )
+
+    q_resp = await asyncio.to_thread(_q_question)
+    if not q_resp.data:
+        return CategoricalDistribution(
+            metric_key=metric_key,
+            expected_type="unknown",
+            total=0,
+            categories=[],
+            unknown=0,
+            enum_values=None,
+        )
+    question = q_resp.data[0]
+    question_id = question["id"]
+    expected_type = str(question.get("expected_type") or "unknown")
+    raw_enum = question.get("enum_values")
+    enum_values: list[str] | None
+    if isinstance(raw_enum, list) and raw_enum:
+        enum_values = [str(v) for v in raw_enum]
+    else:
+        enum_values = None
+
+    iso_from = date_from.isoformat()
+    iso_to = date_to.isoformat()
+
+    def _q_answers() -> Any:
+        return (
+            db.table("session_answers")
+            .select("marked_value")
+            .eq("question_id", question_id)
+            .gte("created_at", iso_from)
+            .lte("created_at", iso_to)
+            .execute()
+        )
+
+    a_resp = await asyncio.to_thread(_q_answers)
+    rows = list(a_resp.data or [])
+
+    counts: dict[str, int] = defaultdict(int)
+    unknown = 0
+    total = 0
+    for r in rows:
+        label = _coerce_categorical(r.get("marked_value"))
+        if label is None:
+            continue
+        total += 1
+        if enum_values is not None and label not in enum_values:
+            unknown += 1
+            continue
+        counts[label] += 1
+
+    if enum_values is not None:
+        ordered_labels = list(enum_values)
+        # Append any non-enum categories last (only if extractor relaxed
+        # invariant — defensive; usually empty for the enum branch above
+        # because mismatches went to `unknown`).
+        for label in counts:
+            if label not in ordered_labels:
+                ordered_labels.append(label)
+    else:
+        ordered_labels = sorted(counts.keys(), key=lambda k: (-counts[k], k))
+
+    categories: list[CategoryCount] = []
+    matched_total = sum(counts.values()) or 1  # avoid div-by-zero for pct
+    for label in ordered_labels:
+        c = counts.get(label, 0)
+        categories.append(
+            CategoryCount(
+                value=label,
+                count=c,
+                pct=(c / matched_total) if c else 0.0,
+            )
+        )
+
+    return CategoricalDistribution(
+        metric_key=metric_key,
+        expected_type=expected_type,
+        total=total,
+        categories=categories,
+        unknown=unknown,
+        enum_values=enum_values,
+    )
 
 
 # --------------------------------------------------------------------------- #

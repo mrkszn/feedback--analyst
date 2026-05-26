@@ -11,7 +11,9 @@ admin_agent или /ask по явной команде.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from aiogram import Router
 from aiogram.filters import Command, CommandObject
@@ -19,8 +21,10 @@ from aiogram.types import Message
 
 from agent.nodes.admin_ask import answer_admin_question
 from bot_admin.handlers.questions import require_admin
+from db.client import get_supabase
 from services.analytics import (
     aggregate_metric,
+    categorical_distribution,
     client_profile,
     semantic_search,
     summary_overview,
@@ -90,6 +94,52 @@ async def cmd_insights(message: Message, command: CommandObject) -> None:
 # /metric <metric_key> [days]
 
 
+async def _question_expected_type(metric_key: str) -> str | None:
+    """Look up `expected_type` for a question by metric_key.
+
+    Returns the type string ("number" / "enum" / "boolean" / "text") or None
+    if no question with that metric_key exists. Inline because it's a one-shot
+    lookup and we don't want a generic 'find by metric_key' service for it.
+    """
+    db = get_supabase()
+
+    def _q() -> Any:
+        return (
+            db.table("questions")
+            .select("expected_type")
+            .eq("metric_key", metric_key)
+            .limit(1)
+            .execute()
+        )
+
+    resp = await asyncio.to_thread(_q)
+    if not resp.data:
+        return None
+    et = resp.data[0].get("expected_type")
+    return str(et) if et is not None else None
+
+
+def _format_categorical(metric_key: str, days: int, dist: dict) -> str:
+    """Render categorical_distribution as a tight ASCII bar table."""
+    cats = [c for c in dist["categories"] if c["count"] > 0] or dist["categories"]
+    if not cats:
+        return f"По «{metric_key}» за {days} дн. данных нет."
+    max_count = max((c["count"] for c in cats), default=1) or 1
+    bar_width = 10
+    lines = [f"📊 Распределение «{metric_key}» за {days} дн. (n={dist['total']}):\n"]
+    label_width = max(len(c["value"]) for c in cats)
+    label_width = min(label_width, 24)
+    for c in cats:
+        label = c["value"][:label_width].ljust(label_width)
+        bar = "█" * round(c["count"] / max_count * bar_width)
+        bar = bar.ljust(bar_width)
+        pct = f"{c['pct'] * 100:5.1f}%"
+        lines.append(f"{label}  │ {bar} │ {c['count']:>3}  ({pct})")
+    if dist.get("unknown"):
+        lines.append(f"\n⚠ Вне списка enum: {dist['unknown']}")
+    return "```\n" + "\n".join(lines) + "\n```"
+
+
 @router.message(Command("metric"))
 async def cmd_metric(message: Message, command: CommandObject) -> None:
     if not await require_admin(message):
@@ -105,8 +155,30 @@ async def cmd_metric(message: Message, command: CommandObject) -> None:
         await message.answer(days_or_err)
         return
     days = days_or_err
-
     date_from, date_to = _window(days)
+
+    expected_type = await _question_expected_type(metric_key)
+    if expected_type is None:
+        await message.answer(f"Вопрос с metric_key «{metric_key}» не найден.")
+        return
+
+    # enum/boolean → распределение по категориям; number → агрегация
+    # avg/min/max; text — не агрегируется, подсказать альтернативы.
+    if expected_type in ("enum", "boolean"):
+        dist = await categorical_distribution(metric_key, date_from, date_to)
+        await message.answer(
+            _format_categorical(metric_key, days, dict(dist)),
+            parse_mode="Markdown",
+        )
+        return
+
+    if expected_type == "text":
+        await message.answer(
+            f"«{metric_key}» — текстовый вопрос, агрегировать число нельзя. "
+            f"Попробуй /find <запрос> для семантического поиска или /topics."
+        )
+        return
+
     points = await aggregate_metric(metric_key, date_from, date_to, group_by="day")
     if not points:
         await message.answer(f"По «{metric_key}» за {days} дн. данных нет.")

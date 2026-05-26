@@ -14,6 +14,7 @@ from langchain_core.tools import tool
 
 from services.analytics import (
     aggregate_metric,
+    categorical_distribution,
     client_profile,
     semantic_search,
     summary_overview,
@@ -164,8 +165,47 @@ async def client_profile_tool(telegram_id: int) -> str:
     )
 
 
+@tool
+async def categorical_distribution_tool(metric_key: str, days: int = 30) -> str:
+    """Распределение ответов по категориям для enum/boolean вопроса.
+
+    Use when admin asks "сколько каких" / "разбивка по" / "процент клиентов
+    в категории X" — для любого вопроса, где expected_type=enum или boolean
+    (например возрастные группы, способ заказа, частота посещения,
+    yes/no-вопросы). НЕ используй для numeric (там нужен aggregate_metric).
+    """
+    if not metric_key.strip():
+        return "metric_key пустой — нечего считать."
+    date_from, date_to = _window(days)
+    try:
+        dist = await categorical_distribution(metric_key, date_from, date_to)
+    except ValueError as exc:
+        return f"Не удалось посчитать распределение: {exc}"
+    if dist["expected_type"] == "unknown":
+        return f"Вопрос с metric_key «{metric_key}» не найден."
+    if dist["expected_type"] not in ("enum", "boolean"):
+        return (
+            f"«{metric_key}» — тип {dist['expected_type']}, не категориальный. "
+            f"Для number используй aggregate_metric_tool."
+        )
+    if dist["total"] == 0:
+        return f"По «{metric_key}» за {days} дн. ответов нет."
+    lines = [
+        f"Распределение «{metric_key}» за {days} дн. (n={dist['total']}, type={dist['expected_type']}):"
+    ]
+    for c in dist["categories"]:
+        if c["count"] == 0 and dist["enum_values"] is not None:
+            lines.append(f"  {c['value']}: 0 (—)")
+        else:
+            lines.append(f"  {c['value']}: {c['count']} ({c['pct'] * 100:.1f}%)")
+    if dist["unknown"]:
+        lines.append(f"  [вне enum: {dist['unknown']}]")
+    return "\n".join(lines)
+
+
 ADMIN_ANALYTICS_TOOLS = [
     aggregate_metric_tool,
+    categorical_distribution_tool,
     topic_histogram_tool,
     summary_overview_tool,
     semantic_search_tool,

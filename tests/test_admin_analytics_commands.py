@@ -119,12 +119,33 @@ async def test_cmd_metric_missing_arg_shows_usage() -> None:
     assert "/metric" in text
 
 
-async def test_cmd_metric_no_data() -> None:
+async def test_cmd_metric_unknown_metric_key() -> None:
     msg = _mk_message()
     with (
         patch(
             "bot_admin.handlers.analytics_commands.require_admin",
             new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "bot_admin.handlers.analytics_commands._question_expected_type",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        await cmd_metric(msg, _cmd("nonexistent"))
+    text = msg.answer.call_args.args[0]
+    assert "не найден" in text.lower()
+
+
+async def test_cmd_metric_number_no_data() -> None:
+    msg = _mk_message()
+    with (
+        patch(
+            "bot_admin.handlers.analytics_commands.require_admin",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "bot_admin.handlers.analytics_commands._question_expected_type",
+            new=AsyncMock(return_value="number"),
         ),
         patch(
             "bot_admin.handlers.analytics_commands.aggregate_metric",
@@ -136,12 +157,16 @@ async def test_cmd_metric_no_data() -> None:
     assert "данных нет" in text.lower()
 
 
-async def test_cmd_metric_renders_ascii_table() -> None:
+async def test_cmd_metric_number_renders_ascii_table() -> None:
     msg = _mk_message()
     with (
         patch(
             "bot_admin.handlers.analytics_commands.require_admin",
             new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "bot_admin.handlers.analytics_commands._question_expected_type",
+            new=AsyncMock(return_value="number"),
         ),
         patch(
             "bot_admin.handlers.analytics_commands.aggregate_metric",
@@ -156,8 +181,94 @@ async def test_cmd_metric_renders_ascii_table() -> None:
     text = msg.answer.call_args.args[0]
     assert "2026-05-20" in text
     assert "```" in text
-    # uses Markdown for monospace
     assert msg.answer.call_args.kwargs.get("parse_mode") == "Markdown"
+
+
+async def test_cmd_metric_enum_routes_to_categorical() -> None:
+    msg = _mk_message()
+    with (
+        patch(
+            "bot_admin.handlers.analytics_commands.require_admin",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "bot_admin.handlers.analytics_commands._question_expected_type",
+            new=AsyncMock(return_value="enum"),
+        ),
+        patch(
+            "bot_admin.handlers.analytics_commands.categorical_distribution",
+            new=AsyncMock(
+                return_value={
+                    "metric_key": "age_group",
+                    "expected_type": "enum",
+                    "total": 5,
+                    "categories": [
+                        {"value": "18-24", "count": 3, "pct": 0.6},
+                        {"value": "25-34", "count": 2, "pct": 0.4},
+                    ],
+                    "unknown": 0,
+                    "enum_values": ["18-24", "25-34"],
+                }
+            ),
+        ),
+    ):
+        await cmd_metric(msg, _cmd("age_group"))
+    text = msg.answer.call_args.args[0]
+    assert "Распределение" in text
+    assert "18-24" in text
+    assert "25-34" in text
+    assert msg.answer.call_args.kwargs.get("parse_mode") == "Markdown"
+
+
+async def test_cmd_metric_boolean_routes_to_categorical() -> None:
+    msg = _mk_message()
+    with (
+        patch(
+            "bot_admin.handlers.analytics_commands.require_admin",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "bot_admin.handlers.analytics_commands._question_expected_type",
+            new=AsyncMock(return_value="boolean"),
+        ),
+        patch(
+            "bot_admin.handlers.analytics_commands.categorical_distribution",
+            new=AsyncMock(
+                return_value={
+                    "metric_key": "would_recommend",
+                    "expected_type": "boolean",
+                    "total": 7,
+                    "categories": [
+                        {"value": "true", "count": 5, "pct": 5 / 7},
+                        {"value": "false", "count": 2, "pct": 2 / 7},
+                    ],
+                    "unknown": 0,
+                    "enum_values": None,
+                }
+            ),
+        ),
+    ):
+        await cmd_metric(msg, _cmd("would_recommend"))
+    text = msg.answer.call_args.args[0]
+    assert "true" in text
+    assert "false" in text
+
+
+async def test_cmd_metric_text_question_suggests_alternatives() -> None:
+    msg = _mk_message()
+    with (
+        patch(
+            "bot_admin.handlers.analytics_commands.require_admin",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "bot_admin.handlers.analytics_commands._question_expected_type",
+            new=AsyncMock(return_value="text"),
+        ),
+    ):
+        await cmd_metric(msg, _cmd("open_feedback"))
+    text = msg.answer.call_args.args[0]
+    assert "/find" in text or "/topics" in text
 
 
 # --------------------------------------------------------------------------- #
