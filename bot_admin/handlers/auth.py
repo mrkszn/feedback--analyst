@@ -65,10 +65,11 @@ async def admin_start(message: Message) -> None:
 
 @router.message(F.text == BTN_ASK)
 async def admin_menu_ask(message: Message) -> None:
-    # Placeholder — conversational admin agent lands in a later commit.
+    # The conversational agent picks up any free-form text via the fallback
+    # router, so this button just nudges the admin to type what they need.
     await message.answer(
-        "Скоро здесь будет диалог с ассистентом. "
-        "Пока используйте слэш-команды или кнопку «📋 Вопросы»."
+        "Спросите что угодно — например, «покажи активные вопросы», "
+        "«удали вопрос про скорость», «добавь вопрос про парковку»."
     )
 
 
