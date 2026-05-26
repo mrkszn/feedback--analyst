@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     # CORS allowlist для admin Mini App (comma-separated origins). Пусто = CORS
     # отключён. Никогда не используем "*", это явный allowlist.
     allowed_mini_app_origins: str = ""
+    # Публичный HTTPS URL admin Mini App'а (для /miniapp команды в боте).
+    # Local dev — cloudflared/ngrok tunnel URL, prod — стабильный домен.
+    admin_mini_app_url: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

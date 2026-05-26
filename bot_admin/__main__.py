@@ -10,6 +10,7 @@ from bot_admin.handlers import (
     analytics_commands,
     auth,
     fallback,
+    miniapp,
     mode,
     question_voice,
     questions,
@@ -31,6 +32,7 @@ ADMIN_COMMANDS: list[BotCommand] = [
     BotCommand(command="topics", description="Топ-топики (±)"),
     BotCommand(command="find", description="Семантический поиск по сессиям"),
     BotCommand(command="clients", description="Профиль клиента по ID"),
+    BotCommand(command="miniapp", description="Открыть Mini App"),
 ]
 
 
@@ -49,6 +51,7 @@ async def main() -> None:
     dp.include_router(questions.router)
     dp.include_router(question_voice.router)
     dp.include_router(admin_question_dialog.router)
+    dp.include_router(miniapp.router)
     # mode-toggle (📊/🛠) ловит точный F.text перед fallback'ом.
     dp.include_router(mode.router)
     # analytics-команды должны срабатывать раньше fallback (LLM agent), чтобы
