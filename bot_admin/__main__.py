@@ -24,6 +24,12 @@ ADMIN_COMMANDS: list[BotCommand] = [
     BotCommand(command="edit_question", description="Изменить вопрос"),
     BotCommand(command="delete_question", description="Удалить вопрос"),
     BotCommand(command="invite_admin", description="Пригласить ещё одного админа"),
+    BotCommand(command="ask", description="Спросить аналитику в свободной форме"),
+    BotCommand(command="insights", description="Сводка за период"),
+    BotCommand(command="metric", description="Динамика метрики"),
+    BotCommand(command="topics", description="Топ-топики (±)"),
+    BotCommand(command="find", description="Семантический поиск по сессиям"),
+    BotCommand(command="clients", description="Профиль клиента по ID"),
 ]
 
 

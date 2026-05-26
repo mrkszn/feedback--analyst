@@ -37,6 +37,12 @@ def test_admin_commands_cover_phase_2a_baseline() -> None:
         assert required in cmds, f"admin popup menu missing /{required}"
 
 
+def test_admin_commands_include_phase_3_analytics() -> None:
+    cmds = _commands_dict(ADMIN_COMMANDS)
+    for required in ("ask", "insights", "metric", "topics", "find", "clients"):
+        assert required in cmds, f"admin popup menu missing Phase-3 /{required}"
+
+
 def test_command_descriptions_under_telegram_limit() -> None:
     # Telegram limit: command description ≤ 256 chars; в UI помещается ~64.
     # Держим разумно коротко чтобы popup не сужался.

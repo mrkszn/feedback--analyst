@@ -17,6 +17,7 @@ from aiogram import Router
 from aiogram.filters import Command, CommandObject
 from aiogram.types import Message
 
+from agent.nodes.admin_ask import answer_admin_question
 from bot_admin.handlers.questions import require_admin
 from services.analytics import (
     aggregate_metric,
@@ -215,3 +216,28 @@ async def cmd_clients(message: Message, command: CommandObject) -> None:
         f"Топ-топики:\n{topics}\n\n"
         f"Recent cards:\n{cards}"
     )
+
+
+# --------------------------------------------------------------------------- #
+# /ask <natural-language question>
+
+
+@router.message(Command("ask"))
+async def cmd_ask(message: Message, command: CommandObject) -> None:
+    if not await require_admin(message):
+        return
+    question = (command.args or "").strip()
+    if not question:
+        await message.answer(
+            "Использование: /ask <вопрос>. Например: /ask какие топ-3 жалобы за неделю?"
+        )
+        return
+    answer = await answer_admin_question(question)
+    text = answer.answer_text.strip() or "Готов помочь дальше."
+    if answer.chart_text:
+        await message.answer(
+            f"{text}\n\n```\n{answer.chart_text}\n```",
+            parse_mode="Markdown",
+        )
+    else:
+        await message.answer(text)
