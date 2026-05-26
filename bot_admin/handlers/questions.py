@@ -117,11 +117,49 @@ async def admin_question_add_text(callback: CallbackQuery, state: FSMContext) ->
     await callback.answer()
 
 
+def _natural_language_exit_check(text: str) -> bool:
+    """Heuristic: does this look like a free-form message, not the structured
+    metric_key|expected_type|text format?
+
+    Triggered to offer the admin a cancel/continue hatch out of a sticky
+    FSM state (live-test 2026-05-25 issue #6 — typing «как у тебя дела?»
+    inside AWAITING_QUESTION_TEXT used to dead-end on a format error).
+    """
+    s = text.strip()
+    if not s or "|" in s:
+        return False
+    # Single token (`food`, `service_speed`) is more likely an aborted
+    # attempt at the structured format than NL — let the existing parser
+    # report the format error.
+    return len(s.split()) >= 2
+
+
+def _exit_hatch_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✖️ Отмена", callback_data="fsmexit:cancel"),
+                InlineKeyboardButton(text="↩️ Продолжить", callback_data="fsmexit:keep"),
+            ]
+        ]
+    )
+
+
 @router.message(AdminFlow.AWAITING_QUESTION_TEXT)
 async def admin_question_add_save(message: Message, state: FSMContext) -> None:
     user = message.from_user
     if user is None or not message.text:
         return
+
+    if _natural_language_exit_check(message.text):
+        await state.update_data(_pending_nl=message.text)
+        await message.answer(
+            "Похоже, это обычное сообщение, а не формат "
+            "metric_key|expected_type|text. Выйти из режима «новый вопрос»?",
+            reply_markup=_exit_hatch_keyboard(),
+        )
+        return
+
     parts = [p.strip() for p in message.text.split("|")]
     if len(parts) < 3:
         await message.answer("Нужно минимум 3 поля: metric_key|expected_type|text")
@@ -260,6 +298,44 @@ async def admin_question_delete_all_apply(callback: CallbackQuery) -> None:
             await callback.message.edit_text(text)
         except Exception:
             await callback.message.answer(text)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "fsmexit:cancel")
+async def admin_fsm_exit_cancel(callback: CallbackQuery, state: FSMContext) -> None:
+    if not await _require_admin_cb(callback):
+        return
+    data = await state.get_data()
+    pending: str = data.get("_pending_nl") or ""
+    await state.clear()
+    if isinstance(callback.message, Message):
+        try:
+            await callback.message.edit_text(
+                "Хорошо, вышли из режима. Пересылаю сообщение ассистенту."
+            )
+        except Exception:
+            pass
+        if pending:
+            # Lazy import to avoid an import cycle (admin_agent → questions
+            # would close the loop via require_admin).
+            from bot_admin.handlers.admin_agent import run_admin_agent
+
+            reply = await run_admin_agent(pending)
+            await callback.message.answer(reply)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "fsmexit:keep")
+async def admin_fsm_exit_keep(callback: CallbackQuery, state: FSMContext) -> None:
+    if not await _require_admin_cb(callback):
+        return
+    await state.update_data(_pending_nl=None)
+    if isinstance(callback.message, Message):
+        try:
+            await callback.message.edit_text("Ок, остаёмся в режиме добавления вопроса.")
+        except Exception:
+            pass
+        await callback.message.answer(_ADD_QUESTION_TEXT_PROMPT)
     await callback.answer()
 
 
