@@ -34,6 +34,13 @@ async def require_admin(message: Message) -> bool:
     return True
 
 
+async def _require_admin_cb(callback: CallbackQuery) -> bool:
+    if callback.from_user is None or not await is_admin(callback.from_user.id):
+        await callback.answer("Только для админов", show_alert=True)
+        return False
+    return True
+
+
 @router.message(F.text == BTN_QUESTIONS)
 async def admin_questions_list_button(message: Message) -> None:
     await admin_questions_list(message)
@@ -48,15 +55,30 @@ async def admin_question_add_button(message: Message, state: FSMContext) -> None
 async def admin_questions_list(message: Message) -> None:
     if not await require_admin(message):
         return
-    rows = await list_questions()
+    rows = await list_questions(active_only=True)
     if not rows:
         await message.answer("Пул пуст. /add_question чтобы создать.")
         return
-    lines = []
-    for r in rows:
-        flag = "✓" if r.get("is_active") else "·"
-        lines.append(f"{flag} {r['id']} [{r['metric_key']}, {r['expected_type']}] — {r['text']}")
-    await message.answer("\n".join(lines))
+
+    await message.answer(f"📋 Активные вопросы ({len(rows)}):")
+    for idx, r in enumerate(rows, 1):
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="✏️ Изменить", callback_data=f"qedit:{r['id']}"),
+                    InlineKeyboardButton(text="🗑 Удалить", callback_data=f"qdel:{r['id']}"),
+                ]
+            ]
+        )
+        await message.answer(
+            f"{idx}. {r['text']} ({r['expected_type']})",
+            reply_markup=kb,
+        )
+
+    footer_kb = InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="🗑 Удалить все", callback_data="qdelall")]]
+    )
+    await message.answer("Действия со всем пулом:", reply_markup=footer_kb)
 
 
 _ADD_QUESTION_TEXT_PROMPT = (
@@ -83,8 +105,7 @@ async def admin_question_add(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(F.data == "addq:text")
 async def admin_question_add_text(callback: CallbackQuery, state: FSMContext) -> None:
-    if callback.from_user is None or not await is_admin(callback.from_user.id):
-        await callback.answer("Только для админов", show_alert=True)
+    if not await _require_admin_cb(callback):
         return
     await state.set_state(AdminFlow.AWAITING_QUESTION_TEXT)
     if isinstance(callback.message, Message):
@@ -118,6 +139,117 @@ async def admin_question_add_save(message: Message, state: FSMContext) -> None:
         return
     await state.clear()
     await message.answer(f"Создан вопрос {row['id']}")
+
+
+@router.callback_query(F.data.startswith("qedit:"))
+async def admin_question_edit_start(callback: CallbackQuery, state: FSMContext) -> None:
+    if not await _require_admin_cb(callback):
+        return
+    qid = (callback.data or "").removeprefix("qedit:")
+    await state.set_state(AdminFlow.AWAITING_QUESTION_EDIT)
+    await state.update_data(edit_qid=qid)
+    if isinstance(callback.message, Message):
+        await callback.message.answer("✏️ Введите новый текст вопроса:")
+    await callback.answer()
+
+
+@router.message(AdminFlow.AWAITING_QUESTION_EDIT)
+async def admin_question_edit_save(message: Message, state: FSMContext) -> None:
+    if message.from_user is None or not message.text:
+        return
+    data = await state.get_data()
+    qid = data.get("edit_qid")
+    if not qid:
+        await state.clear()
+        await message.answer("Сессия редактирования утеряна, начните заново.")
+        return
+    try:
+        row = await update_question(qid, text=message.text.strip())
+    except (ValueError, LookupError) as e:
+        await message.answer(f"Ошибка: {e}")
+        return
+    await state.clear()
+    await message.answer(f"✏️ Обновлено: {row.get('text', message.text.strip())}")
+
+
+@router.callback_query(F.data.startswith("qdel:"))
+async def admin_question_delete_confirm(callback: CallbackQuery) -> None:
+    if not await _require_admin_cb(callback):
+        return
+    qid = (callback.data or "").removeprefix("qdel:")
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Да", callback_data=f"qdelyes:{qid}"),
+                InlineKeyboardButton(text="✖️ Отмена", callback_data="qdelno"),
+            ]
+        ]
+    )
+    if isinstance(callback.message, Message):
+        await callback.message.answer("Удалить этот вопрос?", reply_markup=kb)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("qdelyes:"))
+async def admin_question_delete_apply(callback: CallbackQuery) -> None:
+    if not await _require_admin_cb(callback):
+        return
+    qid = (callback.data or "").removeprefix("qdelyes:")
+    try:
+        await delete_question(qid)
+    except LookupError:
+        if isinstance(callback.message, Message):
+            await callback.message.answer("Вопрос уже удалён.")
+        await callback.answer()
+        return
+    if isinstance(callback.message, Message):
+        try:
+            await callback.message.edit_text("🗑 Удалено.")
+        except Exception:
+            await callback.message.answer("🗑 Удалено.")
+    await callback.answer()
+
+
+@router.callback_query(F.data == "qdelno")
+async def admin_question_delete_cancel(callback: CallbackQuery) -> None:
+    if isinstance(callback.message, Message):
+        try:
+            await callback.message.edit_text("Отменено.")
+        except Exception:
+            await callback.message.answer("Отменено.")
+    await callback.answer()
+
+
+# Удаление всего пула — confirmation + service call в commit #3.
+# В этом коммите делаем кнопку и confirmation; финальный delete-all — placeholder.
+@router.callback_query(F.data == "qdelall")
+async def admin_question_delete_all_confirm(callback: CallbackQuery) -> None:
+    if not await _require_admin_cb(callback):
+        return
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Да", callback_data="qdelallyes"),
+                InlineKeyboardButton(text="✖️ Отмена", callback_data="qdelno"),
+            ]
+        ]
+    )
+    if isinstance(callback.message, Message):
+        await callback.message.answer(
+            "Удалить ВСЕ активные вопросы? Это скроет их у гостей (история сохранится).",
+            reply_markup=kb,
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "qdelallyes")
+async def admin_question_delete_all_apply(callback: CallbackQuery) -> None:
+    # Сервисная функция приходит в коммите #3. Пока no-op заглушка.
+    if not await _require_admin_cb(callback):
+        return
+    if isinstance(callback.message, Message):
+        await callback.message.answer("Сервис ещё не подключён, попробуйте позже.")
+    await callback.answer()
 
 
 @router.message(Command("edit_question"))
