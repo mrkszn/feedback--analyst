@@ -1,4 +1,93 @@
-# Current Changes — 2026-05-26 (autonomous session phase-3)
+# Current Changes — 2026-05-26 (autonomous session phase-4a)
+
+## Session summary
+
+- **Branch:** `autonomous/20260526-1412` (NOT main). Pre-session tag: `pre-autonomous-20260526-1412`.
+- **Phase:** 4A — HTTP API (FastAPI) над уже существующими services. No Mini App frontend (Phase 4C, отдельный репозиторий).
+- **Commits added this session: 5/5** (pyjwt dep + config + auth primitives + admin routes A + admin routes B). All atomic, all green.
+- **Tests:** **370 passing** (up from 333 baseline, +37 new). `ruff check .` clean. `mypy .` clean (113 source files).
+
+## What landed (commits, oldest → newest)
+
+```
+a4bb916  chore(deps): add pyjwt for HTTP API JWT auth                              (#1, pre-session)
+1bdcf3b  feat(config): MINI_APP_SESSION_SECRET + ALLOWED_MINI_APP_ORIGINS env       (#2)
+5e4b490  feat(api): Telegram initData validation + JWT issue/verify                 (#3)
+90ee07b  feat(api): admin routes — auth, overview, metrics, topics                  (#4)
+f4bda59  feat(api): admin routes — semantic, clients, ask + uvicorn entrypoint     (#5)
+```
+
+### Per-commit highlights
+
+- **#1** — `pyjwt>=2.13` add (fastapi/uvicorn были уже). Landed by launcher before orchestrator handoff; счёт открыл.
+- **#2** — `config.Settings.mini_app_session_secret` + `allowed_mini_app_origins` (pydantic Settings); `.env.example` объясняет ожидаемые dev URL (`localhost:3000` + ngrok) и prod placeholder (`miniapp.<domain>` / Vercel). Frontend живёт в отдельном репозитории `telegram-waiter-admin-miniapp`.
+- **#3** — `api/auth/telegram_webapp.validate_initdata` — HMAC-SHA256 по Telegram WebApp spec (sorted data_check_string, two-pass HMAC). Возвращает `TelegramUser`. `api/auth/jwt.issue_token/verify_token` — PyJWT HS256, claim `telegram_id`, fail-loud при пустом `MINI_APP_SESSION_SECRET` (RuntimeError), ValueError при expired/forged. 16 unit-тестов (signature mismatch, wrong bot_token, old/future auth_date, missing fields, secret guard, expired/garbage/empty token).
+- **#4** — Первые четыре `/admin/*` endpoint'а через `services.analytics`: `POST /admin/auth` (init_data → JWT; 401/403 разделены), `GET /admin/overview`, `GET /admin/metrics` (routes by `expected_type`: number → `aggregate_metric`, enum/boolean → `categorical_distribution`, text → пустой ответ), `GET /admin/topics`. `api.deps.auth.current_admin` re-проверяет `admin_users` на каждом запросе (revoke → следующий 401). CORS allowlist строится внутри `create_app()` factory, чтобы тесты могли monkeypatch'нуть settings и собрать свежий app. 14 HTTP тестов (401 без header, bad JWT, revoked admin, 400/404/200 happy paths, CORS preflight).
+- **#5** — Оставшиеся три endpoint'а: `POST /admin/semantic` → `semantic_search`, `GET /admin/clients/{telegram_id}` → `client_profile` (404 на `LookupError`), `POST /admin/ask` → `agent.nodes.admin_ask.answer_admin_question` (local import внутри handler — не тянем LangChain в api module-load). `api/__main__.py` — `uv run python -m api` (host/port через env). `docs/HTTP_API.md` — auth flow + 7 curl-примеров + контекст про frontend в отдельном репо. 7 HTTP тестов.
+
+## New files
+
+- `api/__init__.py`, `api/__main__.py`, `api/main.py` (rewritten as factory)
+- `api/auth/__init__.py`, `api/auth/telegram_webapp.py`, `api/auth/jwt.py`
+- `api/deps/__init__.py`, `api/deps/auth.py`
+- `api/schemas/__init__.py`, `api/schemas/admin.py`
+- `api/routes/__init__.py`, `api/routes/admin.py`
+- `tests/test_api_telegram_initdata.py`, `tests/test_api_jwt.py`
+- `tests/test_api_admin_routes.py`, `tests/test_api_admin_routes_more.py`
+- `docs/HTTP_API.md`
+
+## Changed files
+
+- `config.py` — two new Settings fields
+- `.env.example` — two new env keys + comment block про Mini App репозиторий
+- `api/main.py` — переписан как `create_app()` factory + module-level `app`
+
+## Architectural invariant preserved
+
+- **bot и api/* — два независимых entry points**, оба зовут одни и те же `services/*` через прямой Python-import. Никакой бизнес-логики в `api/*` — только тонкая HTTP-обёртка + auth + pydantic schemas.
+- `services/analytics.py`, `agent/nodes/admin_ask.py`, `bot_admin/handlers/*` — **не трогаем**. `_question_expected_type` дублируется в `api/routes/admin.py` (6 строк) вместо импорта из `bot_admin` — чтобы entry points оставались decoupled.
+- **CORS — strict allowlist** через env (`ALLOWED_MINI_APP_ORIGINS`), никогда `*`. Если env пустой — middleware вообще не подключается.
+- **JWT secret fail-loud**: пустой `MINI_APP_SESSION_SECRET` → `RuntimeError` при попытке issue/verify, а не silent.
+- Никаких миграций БД (Phase 4A — только HTTP layer).
+
+## Verification
+
+- `uv run pytest -q` → 370 passed in 2.01s
+- `uv run ruff check .` → All checks passed!
+- `uv run mypy .` → Success: no issues found in 113 source files
+
+## Deferred / known issues + ready for Phase 4B/4C
+
+- **Integration smoke на dev-БД не выполнен** — autonomous env без live Supabase/Pinecone. Запустить вручную перед merge: `uv run python -m api`, потом `curl /health` + `/admin/auth` с реальным initData из dev Mini App-заглушки.
+- **`POST /admin/ask` — без conversation history persistence.** API принимает `history` в теле, но stateless — Mini App сам управляет историей разговора (это и было в `bot_admin` /ask).
+- **Rate limiting / abuse protection — нет.** MVP scope; добавить slowapi или edge-rate-limit когда Mini App пойдёт за пределы кучки админов.
+- **WebSocket / streaming для /ask — Backlog.** Сейчас polling-style request/response.
+- **Admin agent CRUD (`bot_admin/handlers/admin_agent.py`) — НЕ обёрнут в HTTP.** По плану 4A не требуется; редактирование вопросов остаётся в Telegram-боте.
+- **Готово для Phase 4B (template репозиторий `telegram-miniapp-template`):** auth flow (POST /admin/auth → JWT в localStorage), все 7 endpoint'ов отдают типизированный JSON, CORS configurable через env.
+- **Готово для Phase 4C (`telegram-waiter-admin-miniapp` — клон template):** ровно эти 7 endpoint'ов покрывают: dashboard (`/overview`), графики (`/metrics`, `/topics`), поиск (`/semantic`, `/clients/:id`), чат-режим (`/ask`).
+
+## Branch state
+
+```
+Branch:  autonomous/20260526-1412
+Pre-tag: pre-autonomous-20260526-1412
+
+После сессии человек выполнит ОДНО из:
+  # принять работу:
+  git checkout main && git merge --no-ff autonomous/20260526-1412
+
+  # отбросить:
+  git checkout main && git branch -D autonomous/20260526-1412 && git tag -d pre-autonomous-20260526-1412
+
+  # аварийный сброс main до состояния до сессии:
+  git checkout main && git reset --hard pre-autonomous-20260526-1412
+```
+
+---
+
+## Archived sessions
+
+### Phase 3 (2026-05-26) — Admin Analytics Backend
 
 ## Session summary
 
@@ -90,8 +179,6 @@ Pre-tag: pre-autonomous-20260526-1234
 ```
 
 ---
-
-## Archived sessions
 
 ### Phase 2A.6 (2026-05-26) — Admin UX revamp + guest finalize UX
 
