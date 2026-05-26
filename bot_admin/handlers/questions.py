@@ -98,7 +98,10 @@ async def admin_question_add(message: Message, state: FSMContext) -> None:
             [
                 InlineKeyboardButton(text="Текстом", callback_data="addq:text"),
                 InlineKeyboardButton(text="Голосом", callback_data="addq:voice"),
-            ]
+            ],
+            [
+                InlineKeyboardButton(text="💬 В диалоге", callback_data="addq:dialog"),
+            ],
         ]
     )
     await message.answer("Как добавить?", reply_markup=keyboard)
