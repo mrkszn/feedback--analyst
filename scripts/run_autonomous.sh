@@ -19,7 +19,7 @@
 set -euo pipefail
 
 MODE="${1:-}"
-if [[ "$MODE" != "--headless" && "$MODE" != "--interactive" && "$MODE" != "--smoke" && "$MODE" != "--phase-2a" && "$MODE" != "--phase-2a-6" && "$MODE" != "--phase-3" ]]; then
+if [[ "$MODE" != "--headless" && "$MODE" != "--interactive" && "$MODE" != "--smoke" && "$MODE" != "--phase-2a" && "$MODE" != "--phase-2a-6" && "$MODE" != "--phase-3" && "$MODE" != "--phase-4a" ]]; then
     cat <<EOF
 Usage: $0 <mode> [--resume <branch>]
   mode:
@@ -29,6 +29,7 @@ Usage: $0 <mode> [--resume <branch>]
     --phase-2a     → Phase 2A: orchestrator-промт (4 команды Admin Conversational MVP)
     --phase-2a-6   → Phase 2A.6: admin UX revamp + guest finalize UX (7 коммитов)
     --phase-3      → Phase 3: admin analytics backend, no Mini App (8 коммитов)
+    --phase-4a     → Phase 4A: HTTP API над services (FastAPI + auth, 5 коммитов)
   --resume <branch> (опционально):
     Продолжить работу на существующей autonomous/* ветке (например, после
     permission-denial во время прошлой сессии). НЕ создаёт новый tag/branch.
@@ -62,6 +63,11 @@ case "$MODE" in
     --phase-3)
         PROMPT_FILE="$PROJECT_ROOT/scripts/phase_3_prompt.md"
         # Phase 3 — interactive (8 коммитов: command menu + analytics + agent ask).
+        MODE="--interactive"
+        ;;
+    --phase-4a)
+        PROMPT_FILE="$PROJECT_ROOT/scripts/phase_4a_prompt.md"
+        # Phase 4A — interactive (5 коммитов: FastAPI HTTP API над services).
         MODE="--interactive"
         ;;
     *)
