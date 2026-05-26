@@ -103,6 +103,12 @@ async def _ask_next_question(message: Message, state: FSMContext) -> None:
     idx = data["question_index"]
     qids = data["question_ids"]
     if idx >= len(qids):
+        # Перед долгим финальным блоком (build_client_card + embed +
+        # Pinecone upsert, ~5-15s) даём гостю явный отклик — иначе
+        # визуально кажется, что бот завис. ChatActionSender.typing внутри
+        # _finalize_session не видна на iOS до первого сообщения.
+        if not data.get("finalize_message_sent"):
+            await message.answer("Минутку, собираю всё вместе… 📝")
         await _finalize_with_state(message, state)
         return
     q = data["questions_map"][qids[idx]]
@@ -363,7 +369,9 @@ async def _finalize_session(
     await state.clear()
     # Если ранее уже отправили finalize-сообщение (empty-pool case) — не дублируем.
     if not data.get("finalize_message_sent"):
-        await message.answer("Спасибо за отзыв! Хорошего дня.")
+        await message.answer(
+            "Спасибо большое! 🙏 Передам владельцу — твой отзыв пойдёт в дело. Хорошего дня! ☀️"
+        )
 
 
 @router.message(Command("cancel"))
