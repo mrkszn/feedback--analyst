@@ -1,0 +1,25 @@
+[Unit]
+Description=Telegram Waiter — admin bot (aiogram polling)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=waiter
+Group=waiter
+WorkingDirectory=/opt/telegram-waiter
+EnvironmentFile=/etc/telegram-waiter/.env
+ExecStart=/opt/telegram-waiter/.venv/bin/python -m bot_admin
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/telegram-waiter/bot-admin.log
+StandardError=append:/var/log/telegram-waiter/bot-admin.log
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/telegram-waiter/tmp /var/log/telegram-waiter
+
+[Install]
+WantedBy=multi-user.target
