@@ -21,6 +21,8 @@ from api.schemas.admin import (
     MetricPointOut,
     MetricsResponse,
     OverviewResponse,
+    QuestionOut,
+    QuestionsResponse,
     SemanticHitOut,
     SemanticSearchRequest,
     SemanticSearchResponse,
@@ -39,8 +41,39 @@ from services.analytics import (
     summary_overview,
     topic_histogram,
 )
+from services.questions import list_questions
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+# --------------------------------------------------------------------------- #
+# GET /admin/questions
+
+
+@router.get("/questions", response_model=QuestionsResponse)
+async def questions(
+    _admin_id: Annotated[int, Depends(current_admin)],
+    active_only: Annotated[bool, Query()] = True,
+) -> QuestionsResponse:
+    rows = await list_questions(active_only=active_only)
+    out: list[QuestionOut] = []
+    for r in rows:
+        raw_enum = r.get("enum_values")
+        enum_list: list[str] | None
+        if isinstance(raw_enum, list) and raw_enum:
+            enum_list = [str(v) for v in raw_enum]
+        else:
+            enum_list = None
+        out.append(
+            QuestionOut(
+                id=str(r["id"]),
+                text=str(r["text"]),
+                metric_key=str(r["metric_key"]),
+                expected_type=str(r.get("expected_type") or "unknown"),
+                enum_values=enum_list,
+            )
+        )
+    return QuestionsResponse(questions=out)
 
 
 # --------------------------------------------------------------------------- #

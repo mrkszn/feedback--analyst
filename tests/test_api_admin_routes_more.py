@@ -1,4 +1,4 @@
-"""HTTP tests for /admin/semantic, /admin/clients/{id}, /admin/ask."""
+"""HTTP tests for /admin/questions, /admin/semantic, /admin/clients/{id}, /admin/ask."""
 
 from __future__ import annotations
 
@@ -30,6 +30,96 @@ def client() -> TestClient:
 
 def _token(telegram_id: int = 7) -> str:
     return issue_token(telegram_id, SECRET)
+
+
+# --------------------------------------------------------------------------- #
+# /admin/questions
+
+
+def test_questions_returns_catalog(client: TestClient) -> None:
+    token = _token()
+    fake_rows = [
+        {
+            "id": "11111111-1111-1111-1111-111111111111",
+            "text": "Как вам обслуживание?",
+            "metric_key": "service_rating",
+            "expected_type": "number",
+            "enum_values": None,
+        },
+        {
+            "id": "22222222-2222-2222-2222-222222222222",
+            "text": "Что больше всего понравилось?",
+            "metric_key": "highlight",
+            "expected_type": "enum",
+            "enum_values": ["food", "service", "atmosphere"],
+        },
+    ]
+    with (
+        patch("api.deps.auth.is_admin", return_value=True),
+        patch("api.routes.admin.list_questions", return_value=fake_rows) as m,
+    ):
+        resp = client.get(
+            "/admin/questions",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["questions"]) == 2
+    assert body["questions"][0]["metric_key"] == "service_rating"
+    assert body["questions"][0]["expected_type"] == "number"
+    assert body["questions"][0]["enum_values"] is None
+    assert body["questions"][1]["enum_values"] == ["food", "service", "atmosphere"]
+    # active_only=True is the default
+    _, kwargs = m.call_args
+    assert kwargs["active_only"] is True
+
+
+def test_questions_forwards_active_only_false(client: TestClient) -> None:
+    token = _token()
+    with (
+        patch("api.deps.auth.is_admin", return_value=True),
+        patch("api.routes.admin.list_questions", return_value=[]) as m,
+    ):
+        resp = client.get(
+            "/admin/questions",
+            params={"active_only": "false"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert resp.status_code == 200
+    assert resp.json() == {"questions": []}
+    _, kwargs = m.call_args
+    assert kwargs["active_only"] is False
+
+
+def test_questions_normalizes_missing_expected_type(client: TestClient) -> None:
+    """Rows missing expected_type → schema returns 'unknown' (not 500)."""
+    token = _token()
+    fake_rows = [
+        {
+            "id": "33333333-3333-3333-3333-333333333333",
+            "text": "legacy без expected_type",
+            "metric_key": "legacy_key",
+            # expected_type omitted on purpose
+            "enum_values": [],  # empty list → should normalize to None
+        }
+    ]
+    with (
+        patch("api.deps.auth.is_admin", return_value=True),
+        patch("api.routes.admin.list_questions", return_value=fake_rows),
+    ):
+        resp = client.get(
+            "/admin/questions",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert resp.status_code == 200
+    q = resp.json()["questions"][0]
+    assert q["expected_type"] == "unknown"
+    assert q["enum_values"] is None
+
+
+def test_questions_requires_auth(client: TestClient) -> None:
+    resp = client.get("/admin/questions")
+    assert resp.status_code == 401
 
 
 # --------------------------------------------------------------------------- #

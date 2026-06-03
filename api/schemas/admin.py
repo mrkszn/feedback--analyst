@@ -21,6 +21,22 @@ class AuthResponse(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
+# questions catalog
+
+
+class QuestionOut(BaseModel):
+    id: str
+    text: str
+    metric_key: str
+    expected_type: str
+    enum_values: list[str] | None = None
+
+
+class QuestionsResponse(BaseModel):
+    questions: list[QuestionOut]
+
+
+# --------------------------------------------------------------------------- #
 # overview
 
 
