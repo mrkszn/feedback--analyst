@@ -151,7 +151,11 @@ def test_format_report_renders_all_sections() -> None:
 
     from services.statistics import FullReport
 
-    text = format_report(cast(FullReport, report))
+    messages = format_report(cast(FullReport, report))
+    # format_report теперь возвращает list[str] (1-3 сообщения); склеиваем для
+    # ассертов по содержимому, проверяя что ни одна секция не потерялась.
+    assert isinstance(messages, list)
+    text = "\n".join(messages)
     # шапка
     assert "Статистика" in text
     # активность
@@ -176,7 +180,9 @@ def test_format_report_handles_empty() -> None:
 
     from services.statistics import FullReport
 
-    text = format_report(cast(FullReport, _empty_report()))
+    messages = format_report(cast(FullReport, _empty_report()))
+    assert isinstance(messages, list)
+    text = "\n".join(messages)
     assert "Статистика" in text
     assert "—" in text  # пустые секции дают тире
 
@@ -228,9 +234,20 @@ async def test_cb_statistics_calls_full_report_and_replies() -> None:
     ):
         await cb_statistics_period(cb)
     m.assert_awaited_once()
-    cb.message.answer.assert_awaited_once()
-    text = cb.message.answer.call_args.args[0]
-    assert "Статистика" in text
+    # format_report → list[str]; handler шлёт по одному .answer на сообщение
+    # (для пустого отчёта это >=2: обзор + блок вопросов).
+    calls = cb.message.answer.await_args_list
+    assert len(calls) >= 2
+    # первое сообщение — обзор с заголовком
+    assert "Статистика" in calls[0].args[0]
+    # CSV-кнопка крепится только к ПОСЛЕДНЕМУ сообщению
+    last_markup = calls[-1].kwargs.get("reply_markup")
+    assert last_markup is not None
+    csv_btn = last_markup.inline_keyboard[0][0]
+    assert csv_btn.callback_data == "stats_csv:7d"
+    # к остальным сообщениям кнопка не цепляется
+    for c in calls[:-1]:
+        assert c.kwargs.get("reply_markup") is None
 
 
 async def test_cb_statistics_rejects_unknown_period() -> None:

@@ -2,19 +2,23 @@
 
 from __future__ import annotations
 
+import csv
+import io
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
 
 from services.statistics import (
+    FullReport,
     TopicRow,
     _classify_topic,
     _classify_value,
     _summarize_metric,
     _summarize_topics,
     _to_number,
+    build_csv_report,
     full_report,
 )
 
@@ -409,3 +413,128 @@ def _unused_timedelta_import_marker() -> None:
     future edit. (We may use it for parametric windows soon.)
     """
     _ = timedelta(days=1)
+
+
+# --------------------------------------------------------------------------- #
+# build_csv_report
+
+
+def _csv_report(
+    *,
+    recent: list[dict[str, Any]] | None = None,
+    metrics: list[dict[str, Any]] | None = None,
+    topics_positive: list[dict[str, Any]] | None = None,
+) -> FullReport:
+    report: dict[str, Any] = {
+        "period_label": "7 дней",
+        "date_from": "2026-05-29T00:00:00+00:00",
+        "date_to": "2026-06-05T00:00:00+00:00",
+        "activity": {
+            "sessions_started": 0,
+            "sessions_finished": 0,
+            "unique_clients": 0,
+            "returning_clients": 0,
+        },
+        "sentiment_counts": {"positive": 0, "neutral": 0, "negative": 0},
+        "sentiment_total": 0,
+        "avg_sentiment": None,
+        "topics_positive": topics_positive or [],
+        "topics_neutral": [],
+        "topics_negative": [],
+        "metrics": metrics or [],
+        "recent_sessions": recent or [],
+    }
+    return cast(FullReport, report)
+
+
+def _full_csv_report() -> FullReport:
+    return _csv_report(
+        recent=[
+            {
+                "started_at": "2026-06-05T12:00:00+00:00",
+                "sentiment": "positive",
+                "summary": "Хвалили подачу",
+                "client_id": 100,
+            },
+        ],
+        metrics=[
+            {
+                "metric_key": "purpose",
+                "text": "Цель визита?",
+                "expected_type": "enum",
+                "n": 3,
+                "avg": None,
+                "min": None,
+                "max": None,
+                "top_value": "ужин",
+                "top_pct": 0.67,
+                "distribution": [
+                    {"value": "ужин", "count": 2, "pct": 0.67},
+                    {"value": "бизнес", "count": 1, "pct": 0.33},
+                ],
+                "response_rate": None,
+            },
+            {
+                "metric_key": "speed",
+                "text": "Скорость?",
+                "expected_type": "number",
+                "n": 2,
+                "avg": 4.5,
+                "min": 4.0,
+                "max": 5.0,
+                "top_value": None,
+                "top_pct": None,
+                "distribution": None,
+                "response_rate": None,
+            },
+        ],
+        topics_positive=[{"topic": "еда", "count": 4, "avg_sentiment": 0.9}],
+    )
+
+
+def test_build_csv_report_has_all_sections() -> None:
+    out = build_csv_report(_full_csv_report())
+    assert "# Sessions" in out
+    assert "# Metrics" in out
+    assert "# Topics" in out
+
+
+def test_build_csv_report_is_valid_csv() -> None:
+    out = build_csv_report(_full_csv_report())
+    # Секции-разделители (# ...) и пустые строки убираем перед парсингом —
+    # остаётся набор header+data строк, которые csv.reader обязан разобрать.
+    data_lines = [line for line in out.splitlines() if line.strip() and not line.startswith("#")]
+    rows = list(csv.reader(io.StringIO("\n".join(data_lines))))
+    # каждая строка распарсилась хотя бы в одну колонку
+    assert rows
+    assert all(len(r) >= 1 for r in rows)
+    # заголовок секции Sessions присутствует среди распарсенных строк
+    assert ["date", "client_id", "sentiment", "topics", "summary_text"] in rows
+
+
+def test_build_csv_report_escapes_commas() -> None:
+    report = _csv_report(
+        topics_positive=[
+            {"topic": "Семья с детьми, малыши", "count": 3, "avg_sentiment": 0.8},
+        ],
+    )
+    out = build_csv_report(report)
+    # значение с запятой завёрнуто в кавычки сырым writer'ом
+    assert '"Семья с детьми, малыши"' in out
+    # и читается обратно как ОДНО поле
+    rows = list(csv.reader(io.StringIO(out)))
+    topic_rows = [r for r in rows if r and r[0] == "Семья с детьми, малыши"]
+    assert len(topic_rows) == 1
+    assert topic_rows[0][1] == "positive"
+
+
+def test_build_csv_report_handles_empty() -> None:
+    out = build_csv_report(_csv_report())
+    # секции и их headers есть даже при пустом отчёте
+    assert "# Sessions" in out
+    assert "# Metrics" in out
+    assert "# Topics" in out
+    rows = list(csv.reader(io.StringIO(out)))
+    # три header-строки присутствуют; data-строк нет
+    assert ["date", "client_id", "sentiment", "topics", "summary_text"] in rows
+    assert ["topic", "sentiment_filter", "count", "avg_sentiment"] in rows

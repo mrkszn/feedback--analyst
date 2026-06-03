@@ -1,18 +1,22 @@
-"""Catch-all admin handler — free-form text goes to the questions-CRUD agent.
+"""Catch-all admin handler — free-form text goes to the analytics agent.
 
 Registered LAST in `bot_admin/__main__.py` so slash commands, reply-keyboard
 button matches, and active FSM states win first. Anything that reaches here
 is free-form text from an admin outside any FSM flow → routed to the
-questions-CRUD agent (`tools/admin_question_tools.py`).
+analytics agent (`agent/analytics_agent/runner.py:answer_v2`).
 
-Analytics agent has been retired pending a redesign (see Phase 5 plan).
+Question-pool CRUD now lives behind explicit commands (/add_question,
+/edit_question, /delete_question + their keyboards). The conversational CRUD
+agent (`admin_agent.py`) is kept for reuse via the HTTP API but is no longer
+wired to free text here.
 """
 
 from aiogram import Router
 from aiogram.filters import StateFilter
 from aiogram.types import Message
+from aiogram.utils.chat_action import ChatActionSender
 
-from bot_admin.handlers.admin_agent import reply_via_agent
+from agent.analytics_agent.runner import answer_v2
 from bot_admin.handlers.questions import require_admin
 
 router = Router(name="admin_fallback")
@@ -24,4 +28,14 @@ async def admin_handle_freetext_fallback(message: Message) -> None:
         return
     if not message.text:
         return
-    await reply_via_agent(message)
+
+    bot = message.bot
+    if bot is not None:
+        async with ChatActionSender.typing(chat_id=message.chat.id, bot=bot):
+            answer = await answer_v2(message.text, history=None)
+    else:
+        answer = await answer_v2(message.text, history=None)
+
+    await message.answer(answer.answer_text or "Не получилось обработать запрос.")
+    if answer.chart_text:
+        await message.answer(f"```text\n{answer.chart_text}\n```", parse_mode="Markdown")

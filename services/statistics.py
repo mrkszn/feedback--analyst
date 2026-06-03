@@ -14,6 +14,8 @@ Single function `full_report(date_from, date_to)` собирает разом:
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
 from collections import defaultdict
 from datetime import datetime
 from typing import Any, Literal, TypedDict, cast
@@ -511,3 +513,116 @@ async def recent_sessions(
             )
         )
     return out
+
+
+# --------------------------------------------------------------------------- #
+# CSV export
+
+
+def _fmt_num(value: float | None) -> str:
+    return "" if value is None else f"{value:g}"
+
+
+def build_csv_report(report: FullReport) -> str:
+    """Render a `FullReport` as a multi-section CSV string.
+
+    Three `#`-prefixed sections: Sessions (recent only — `FullReport` does not
+    carry the full session list), Metrics (one row per category for enum/boolean,
+    one row per question for number/text), Topics (positive/neutral/negative
+    flattened with their sign as `sentiment_filter`). Encode with `utf-8-sig`
+    at the call site so Excel reads Cyrillic correctly.
+    """
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+
+    # ---------- Sessions ----------
+    writer.writerow(["# Sessions"])
+    writer.writerow(["date", "client_id", "sentiment", "topics", "summary_text"])
+    for s in report["recent_sessions"]:
+        date = (s["started_at"] or "")[:10]
+        summary_text = (s["summary"] or "").strip().replace("\n", " ")
+        writer.writerow(
+            [
+                date,
+                "" if s["client_id"] is None else str(s["client_id"]),
+                s["sentiment"] or "",
+                "",  # per-session topics are not part of FullReport
+                summary_text,
+            ]
+        )
+
+    # ---------- Metrics ----------
+    writer.writerow([])
+    writer.writerow(["# Metrics"])
+    writer.writerow(
+        [
+            "question_text",
+            "metric_key",
+            "expected_type",
+            "total",
+            "category",
+            "count",
+            "pct",
+            "avg",
+            "min",
+            "max",
+        ]
+    )
+    for m in report["metrics"]:
+        if m["expected_type"] in ("enum", "boolean"):
+            distribution = m["distribution"] or []
+            if not distribution:
+                writer.writerow(
+                    [m["text"], m["metric_key"], m["expected_type"], m["n"], "", "", "", "", "", ""]
+                )
+            for d in distribution:
+                writer.writerow(
+                    [
+                        m["text"],
+                        m["metric_key"],
+                        m["expected_type"],
+                        m["n"],
+                        d["value"],
+                        d["count"],
+                        _fmt_num(d.get("pct")),
+                        "",
+                        "",
+                        "",
+                    ]
+                )
+        elif m["expected_type"] == "number":
+            writer.writerow(
+                [
+                    m["text"],
+                    m["metric_key"],
+                    m["expected_type"],
+                    m["n"],
+                    "",
+                    "",
+                    "",
+                    _fmt_num(m["avg"]),
+                    _fmt_num(m["min"]),
+                    _fmt_num(m["max"]),
+                ]
+            )
+        else:
+            writer.writerow(
+                [m["text"], m["metric_key"], m["expected_type"], m["n"], "", "", "", "", "", ""]
+            )
+
+    # ---------- Topics ----------
+    writer.writerow([])
+    writer.writerow(["# Topics"])
+    writer.writerow(["topic", "sentiment_filter", "count", "avg_sentiment"])
+    topic_buckets: list[tuple[str, list[TopicRow]]] = [
+        ("positive", report["topics_positive"]),
+        ("neutral", report["topics_neutral"]),
+        ("negative", report["topics_negative"]),
+    ]
+    for sentiment_filter, rows in topic_buckets:
+        for t in rows:
+            writer.writerow(
+                [t["topic"], sentiment_filter, t["count"], _fmt_num(t["avg_sentiment"])]
+            )
+
+    return buf.getvalue()

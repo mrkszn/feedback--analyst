@@ -16,6 +16,7 @@ from typing import Any
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import (
+    BufferedInputFile,
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -26,7 +27,12 @@ from aiogram.utils.chat_action import ChatActionSender
 from bot_admin.handlers.questions import require_admin
 from bot_admin.keyboards import BTN_STATISTICS
 from services.admin_auth import is_admin
-from services.statistics import FullReport, MetricSummary, full_report
+from services.statistics import (
+    FullReport,
+    MetricSummary,
+    build_csv_report,
+    full_report,
+)
 
 router = Router(name="admin_statistics")
 
@@ -94,36 +100,71 @@ def _topic_lines(rows: Sequence[Mapping[str, Any]], indent: str = "  ") -> str:
     return "\n".join(parts)
 
 
-def _format_metric(m: MetricSummary) -> str:
-    label = f"{m['text']!r} ({m['expected_type']})"
-    if m["n"] == 0:
-        return f"  • {label}: ответов нет"
+_TG_LIMIT = 4096
+_BAR_WIDTH = 10
+_LABEL_CAP = 24
 
-    if m["expected_type"] == "number":
-        avg = f"{m['avg']:.2f}" if m["avg"] is not None else "—"
+
+def _ascii_bar(pct: float) -> str:
+    """Filled-block bar of width _BAR_WIDTH for a 0..1 ratio."""
+    filled = round(max(0.0, min(1.0, pct)) * _BAR_WIDTH)
+    return "█" * filled
+
+
+def _format_metric_block(m: MetricSummary) -> list[str]:
+    """One question rendered as a multi-line block (▸ header + body lines)."""
+    et = m["expected_type"]
+
+    if et in ("enum", "boolean"):
+        dist = m.get("distribution") or []
+        header = f"▸ {m['text']}  [{et}, n={m['n']}]"
+        if not dist:
+            return [header, "   (нет ответов)"]
+        label_w = min(_LABEL_CAP, max(len(str(d["value"])) for d in dist))
+        lines = [header]
+        for d in dist:
+            value = str(d["value"])
+            label = value[:_LABEL_CAP].ljust(label_w)
+            pct = float(d.get("pct") or 0.0)
+            lines.append(f"   {label}  {_ascii_bar(pct)}  {d['count']} ({pct * 100:.0f}%)")
+        return lines
+
+    if et == "number":
+        header = f"▸ {m['text']}  [number, n={m['n']}]"
+        if m["n"] == 0 or m["avg"] is None:
+            return [header, "   (нет ответов)"]
+        avg = f"{m['avg']:.2f}"
         mn = f"{m['min']:.2f}" if m["min"] is not None else "—"
         mx = f"{m['max']:.2f}" if m["max"] is not None else "—"
-        return f"  • {label}: avg={avg} (min={mn}, max={mx}, n={m['n']})"
-
-    if m["expected_type"] in ("enum", "boolean"):
-        dist = m.get("distribution") or []
-        if not dist:
-            return f"  • {label}: n={m['n']}"
-        top = m.get("top_value") or "—"
-        top_pct_val = m.get("top_pct")
-        top_pct = f"{top_pct_val * 100:.0f}%" if top_pct_val is not None else "—"
-        breakdown = ", ".join(
-            f"{d['value']}: {d['count']} ({d['pct'] * 100:.0f}%)" for d in dist[:5]
-        )
-        return f"  • {label}: топ «{top}» ({top_pct}), n={m['n']}\n       {breakdown}"
+        return [header, f"   avg={avg}   min={mn}   max={mx}"]
 
     # text
+    header = f"▸ {m['text']}  [text]"
     rr = m.get("response_rate")
-    rr_str = f"{rr * 100:.0f}%" if rr is not None else "—"
-    return f"  • {label}: ответили {rr_str} (n={m['n']})"
+    if rr is None:
+        return [header, "   ответили: 0"]
+    answered = round(rr * m["n"])
+    return [header, f"   ответили: {answered} из {m['n']} ({rr * 100:.0f}%)"]
 
 
-def format_report(report: FullReport) -> str:
+def _split_by_limit(blocks: list[list[str]], head: list[str]) -> list[str]:
+    """Pack per-question blocks into ≤_TG_LIMIT messages, splitting on block boundaries."""
+    messages: list[str] = []
+    current: list[str] = list(head)
+    for block in blocks:
+        candidate = [*current, "", *block] if current else block
+        if current and len("\n".join(candidate)) > _TG_LIMIT:
+            messages.append("\n".join(current))
+            current = list(block)
+        else:
+            current = candidate
+    if current:
+        messages.append("\n".join(current))
+    return messages
+
+
+def format_report(report: FullReport) -> list[str]:
+    """Render a `FullReport` as 1-3 Telegram messages (each ≤_TG_LIMIT chars)."""
     period = _PERIOD_LABELS.get(_period_key_from_label(report["period_label"]), "период")
     date_to = report["date_to"][:10]
     date_from_str = (report["date_from"] or "—")[:10]
@@ -133,7 +174,10 @@ def format_report(report: FullReport) -> str:
     sentiments = report["sentiment_counts"]
     total_sent = report["sentiment_total"]
 
-    head = [
+    messages: list[str] = []
+
+    # ---- message 1: KPI + sentiment + topics ----
+    overview = [
         f"📊 Статистика — {period}",
         f"({range_str})",
         "",
@@ -157,20 +201,20 @@ def format_report(report: FullReport) -> str:
         _topic_lines(report["topics_neutral"], indent="    "),
         "  ❤️‍🩹 Негативные:",
         _topic_lines(report["topics_negative"], indent="    "),
-        "",
-        "📋 Метрики (по вопросам)",
     ]
-    metrics_block: list[str] = []
-    if not report["metrics"]:
-        metrics_block.append("  (нет активных вопросов в пуле)")
-    else:
-        for m in report["metrics"]:
-            metrics_block.append(_format_metric(m))
+    messages.append("\n".join(overview))
 
-    recent: list[str] = []
+    # ---- message(s) 2: questions (split if > limit) ----
+    q_head = ["📋 Вопросы"]
+    if not report["metrics"]:
+        messages.append("\n".join([*q_head, "", "   (нет активных вопросов в пуле)"]))
+    else:
+        blocks = [_format_metric_block(m) for m in report["metrics"]]
+        messages.extend(_split_by_limit(blocks, q_head))
+
+    # ---- message 3: recent reviews ----
     if report["recent_sessions"]:
-        recent.append("")
-        recent.append("📝 Последние отзывы")
+        recent = ["📝 Последние отзывы"]
         for r in report["recent_sessions"]:
             date = (r["started_at"] or "—")[:10]
             sent_emoji = {"positive": "💚", "neutral": "😐", "negative": "❤️‍🩹"}.get(
@@ -180,8 +224,9 @@ def format_report(report: FullReport) -> str:
             if len(snippet) > 140:
                 snippet = snippet[:137] + "…"
             recent.append(f"  {date} {sent_emoji} {snippet}")
+        messages.append("\n".join(recent))
 
-    return "\n".join(head + metrics_block + recent)
+    return messages
 
 
 def _period_key_from_label(label: str) -> str:
@@ -245,5 +290,49 @@ async def cb_statistics_period(callback: CallbackQuery) -> None:
     else:
         report = await full_report(date_from, date_to, period_label=label)
 
-    await callback.message.answer(format_report(report))
+    messages = format_report(report)
+    csv_markup = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📥 Получить CSV", callback_data=f"stats_csv:{period_key}")],
+        ]
+    )
+    for i, text in enumerate(messages):
+        markup = csv_markup if i == len(messages) - 1 else None
+        await callback.message.answer(text, reply_markup=markup)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("stats_csv:"))
+async def cb_statistics_csv(callback: CallbackQuery) -> None:
+    if callback.from_user is None or callback.data is None:
+        return
+    if not await is_admin(callback.from_user.id):
+        await callback.answer("Только для админов.", show_alert=True)
+        return
+    if not isinstance(callback.message, Message):
+        await callback.answer()
+        return
+
+    period_key = callback.data.removeprefix("stats_csv:")
+    if period_key not in _PERIOD_LABELS:
+        await callback.answer("Неизвестный период.", show_alert=True)
+        return
+
+    label = _PERIOD_LABELS[period_key]
+    date_from, date_to = _window(period_key)
+
+    bot = callback.message.bot
+    if bot is not None:
+        async with ChatActionSender.typing(chat_id=callback.message.chat.id, bot=bot):
+            report = await full_report(date_from, date_to, period_label=label)
+    else:
+        report = await full_report(date_from, date_to, period_label=label)
+
+    content = build_csv_report(report).encode("utf-8-sig")
+    today = datetime.now(UTC).date()
+    document = BufferedInputFile(
+        content,
+        filename=f"statistics_{period_key}_{today.isoformat()}.csv",
+    )
+    await callback.message.answer_document(document)
     await callback.answer()
