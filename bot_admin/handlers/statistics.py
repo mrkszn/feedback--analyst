@@ -25,6 +25,7 @@ from aiogram.utils.chat_action import ChatActionSender
 
 from bot_admin.handlers.questions import require_admin
 from bot_admin.keyboards import BTN_STATISTICS
+from services.admin_auth import is_admin
 from services.statistics import FullReport, MetricSummary, full_report
 
 router = Router(name="admin_statistics")
@@ -213,11 +214,14 @@ async def menu_statistics(message: Message) -> None:
 async def cb_statistics_period(callback: CallbackQuery) -> None:
     if callback.from_user is None or callback.data is None:
         return
+    # NB: используем callback.from_user.id напрямую — у callback.message.from_user
+    # лежит БОТ (а не кликающий админ), поэтому require_admin(message) даёт
+    # false negative для inline-кнопок.
+    if not await is_admin(callback.from_user.id):
+        await callback.answer("Только для админов.", show_alert=True)
+        return
     if not isinstance(callback.message, Message):
         await callback.answer()
-        return
-    if not await require_admin(callback.message):
-        await callback.answer("Только для админов.", show_alert=True)
         return
 
     period_key = callback.data.removeprefix("stats:")

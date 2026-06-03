@@ -218,7 +218,7 @@ async def test_cb_statistics_calls_full_report_and_replies() -> None:
     cb = _mk_callback("stats:7d")
     with (
         patch(
-            "bot_admin.handlers.statistics.require_admin",
+            "bot_admin.handlers.statistics.is_admin",
             new=AsyncMock(return_value=True),
         ),
         patch(
@@ -236,8 +236,24 @@ async def test_cb_statistics_calls_full_report_and_replies() -> None:
 async def test_cb_statistics_rejects_unknown_period() -> None:
     cb = _mk_callback("stats:weird")
     with patch(
-        "bot_admin.handlers.statistics.require_admin",
+        "bot_admin.handlers.statistics.is_admin",
         new=AsyncMock(return_value=True),
     ):
         await cb_statistics_period(cb)
     cb.answer.assert_awaited_with("Неизвестный период.", show_alert=True)
+
+
+async def test_cb_statistics_rejects_non_admin() -> None:
+    """Регрессионный тест: callback.from_user != callback.message.from_user.
+
+    Раньше require_admin(callback.message) проверял ID БОТА вместо ID кликающего
+    админа, что давало false negative «Только для админов» даже для зарегистр.
+    админа. Теперь проверка идёт через callback.from_user.id.
+    """
+    cb = _mk_callback("stats:7d")
+    with patch(
+        "bot_admin.handlers.statistics.is_admin",
+        new=AsyncMock(return_value=False),
+    ):
+        await cb_statistics_period(cb)
+    cb.answer.assert_awaited_with("Только для админов.", show_alert=True)
