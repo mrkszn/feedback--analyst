@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 # Останавливать предыдущие запуски на той же ветке — экономим actions-минуты.
 concurrency:
@@ -45,3 +46,67 @@ jobs:
 
       - name: Pytest
         run: uv run pytest -q
+
+  deploy:
+    name: deploy to VPS
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: validate
+    # Only on push to main (not PR) and manual dispatch. Skip if CI is just
+    # validating an in-flight PR.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+
+    concurrency:
+      # One deploy at a time — never overlap two pushes restarting the bot.
+      group: deploy-vps
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 0700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 0600 ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0644 ~/.ssh/known_hosts
+
+      - name: Rsync code to VPS
+        env:
+          DEPLOY_SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+        run: |
+          set -euo pipefail
+          rsync -az --delete \
+            --exclude='.venv/' --exclude='.git/' --exclude='__pycache__/' \
+            --exclude='*.pyc' --exclude='.pytest_cache/' --exclude='.mypy_cache/' \
+            --exclude='.ruff_cache/' --exclude='runs/' --exclude='tmp/' \
+            --exclude='.env' --exclude='.vscode/' --exclude='.claude/' \
+            --exclude='design/' --exclude='deploy/secrets/' \
+            -e 'ssh -i ~/.ssh/id_ed25519 -o UserKnownHostsFile=~/.ssh/known_hosts' \
+            ./ "${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}:/opt/telegram-waiter/"
+
+      - name: Sync deps and restart units
+        env:
+          DEPLOY_SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_ed25519 -o UserKnownHostsFile=~/.ssh/known_hosts \
+            "${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}" \
+            'set -euo pipefail
+             export UV_CACHE_DIR=/opt/telegram-waiter/.uv-cache
+             cd /opt/telegram-waiter
+             /usr/local/bin/uv sync --frozen
+             sudo -n /usr/bin/systemctl restart bot-guest.service
+             sudo -n /usr/bin/systemctl restart bot-admin.service
+             sleep 3
+             sudo -n /usr/bin/systemctl is-active bot-guest.service
+             sudo -n /usr/bin/systemctl is-active bot-admin.service'
