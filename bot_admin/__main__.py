@@ -11,9 +11,9 @@ from bot_admin.handlers import (
     auth,
     fallback,
     miniapp,
-    mode,
     question_voice,
     questions,
+    statistics,
 )
 from bot_common.middleware import TypingMiddleware
 from config import settings
@@ -26,12 +26,8 @@ ADMIN_COMMANDS: list[BotCommand] = [
     BotCommand(command="edit_question", description="Изменить вопрос"),
     BotCommand(command="delete_question", description="Удалить вопрос"),
     BotCommand(command="invite_admin", description="Пригласить ещё одного админа"),
-    BotCommand(command="ask", description="Спросить аналитику в свободной форме"),
-    BotCommand(command="insights", description="Сводка за период"),
-    BotCommand(command="metric", description="Динамика метрики"),
-    BotCommand(command="topics", description="Топ-топики (±)"),
-    BotCommand(command="find", description="Семантический поиск по сессиям"),
-    BotCommand(command="clients", description="Профиль клиента по ID"),
+    BotCommand(command="statistics", description="Статистика отзывов за период"),
+    BotCommand(command="topics", description="Все топики за период"),
     BotCommand(command="miniapp", description="Открыть Mini App"),
 ]
 
@@ -52,10 +48,9 @@ async def main() -> None:
     dp.include_router(question_voice.router)
     dp.include_router(admin_question_dialog.router)
     dp.include_router(miniapp.router)
-    # mode-toggle (📊/🛠) ловит точный F.text перед fallback'ом.
-    dp.include_router(mode.router)
-    # analytics-команды должны срабатывать раньше fallback (LLM agent), чтобы
-    # /insights /metric /topics /find /clients /ask не уходили в admin_agent.
+    dp.include_router(statistics.router)
+    # analytics-команды (/topics) должны срабатывать раньше fallback (LLM agent),
+    # иначе свободный текст admin_agent перехватит /topics.
     dp.include_router(analytics_commands.router)
     dp.include_router(fallback.router)
 

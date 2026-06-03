@@ -1,35 +1,20 @@
-"""Admin analytics slash-команды: /insights, /metric, /topics (+/find, /clients, /ask).
+"""/topics — полная статистика по топикам за период.
 
-Эти handler'ы — тонкая UX-обёртка над `services.analytics` и
-`agent.nodes.admin_ask`. Никаких HTTP-вызовов, никакого auth-слоя — bot
-зовёт services напрямую (см. архитектурный invariant Phase 3 в плане).
-
-Регистрируются в `bot_admin/__main__.py` ПЕРЕД `fallback` (admin_agent),
-чтобы /commands ловились слотом первыми, а свободный текст уходил в
-admin_agent или /ask по явной команде.
+Тонкая обёртка над `services.analytics.topic_histogram`. Старые команды
+(/insights, /metric, /find, /clients, /ask) убраны — pending Phase 5
+redesign of the analytics agent.
 """
 
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 from aiogram import Router
 from aiogram.filters import Command, CommandObject
 from aiogram.types import Message
 
-from agent.nodes.admin_ask import answer_admin_question
 from bot_admin.handlers.questions import require_admin
-from db.client import get_supabase
-from services.analytics import (
-    aggregate_metric,
-    categorical_distribution,
-    client_profile,
-    semantic_search,
-    summary_overview,
-    topic_histogram,
-)
+from services.analytics import topic_histogram
 
 router = Router(name="admin_analytics")
 
@@ -57,146 +42,56 @@ def _parse_days(arg: str | None, default: int = DEFAULT_DAYS) -> int | str:
     return n
 
 
-def _fmt_sentiment(score: float | None) -> str:
-    if score is None:
-        return "—"
-    label = "позитив" if score > 0.33 else ("негатив" if score < -0.33 else "нейтрально")
-    return f"{score:+.2f} ({label})"
+def _format_sentiment(score: float) -> str:
+    if score > 0.33:
+        return "позитив"
+    if score < -0.33:
+        return "негатив"
+    return "нейтрал"
 
 
-# --------------------------------------------------------------------------- #
-# /insights
-
-
-@router.message(Command("insights"))
-async def cmd_insights(message: Message, command: CommandObject) -> None:
-    if not await require_admin(message):
-        return
-    days_or_err = _parse_days(command.args)
-    if isinstance(days_or_err, str):
-        await message.answer(days_or_err)
-        return
-    days = days_or_err
-    date_from, date_to = _window(days)
-    o = await summary_overview(date_from, date_to)
-    pos = "\n".join(f"  • {t['topic']} (n={t['count']})" for t in o["top_positive_topics"]) or "  —"
-    neg = "\n".join(f"  • {t['topic']} (n={t['count']})" for t in o["top_negative_topics"]) or "  —"
-    await message.answer(
-        f"📊 Сводка за {days} дн.\n\n"
-        f"Сессий: {o['sessions_count']}\n"
-        f"Avg sentiment: {_fmt_sentiment(o['avg_sentiment'])}\n\n"
-        f"Топ позитив:\n{pos}\n\n"
-        f"Топ негатив:\n{neg}"
-    )
-
-
-# --------------------------------------------------------------------------- #
-# /metric <metric_key> [days]
-
-
-async def _question_expected_type(metric_key: str) -> str | None:
-    """Look up `expected_type` for a question by metric_key.
-
-    Returns the type string ("number" / "enum" / "boolean" / "text") or None
-    if no question with that metric_key exists. Inline because it's a one-shot
-    lookup and we don't want a generic 'find by metric_key' service for it.
+def _format_topics_report(days: int, all_topics: list[dict]) -> str:
+    """Полная разбивка: позитивные / нейтральные / негативные секции +
+    общая таблица по убыванию упоминаний.
     """
-    db = get_supabase()
+    if not all_topics:
+        return f"🏷 Топики за {days} дн.\n\nЗа этот период не было упоминаний топиков."
 
-    def _q() -> Any:
-        return (
-            db.table("questions")
-            .select("expected_type")
-            .eq("metric_key", metric_key)
-            .limit(1)
-            .execute()
-        )
+    positive: list[dict] = []
+    neutral: list[dict] = []
+    negative: list[dict] = []
+    for t in all_topics:
+        s = float(t.get("avg_sentiment") or 0.0)
+        if s > 0.33:
+            positive.append(t)
+        elif s < -0.33:
+            negative.append(t)
+        else:
+            neutral.append(t)
 
-    resp = await asyncio.to_thread(_q)
-    if not resp.data:
-        return None
-    et = resp.data[0].get("expected_type")
-    return str(et) if et is not None else None
+    def _section(title: str, rows: list[dict]) -> str:
+        if not rows:
+            return f"{title}\n  —"
+        lines = [title]
+        for t in rows:
+            score = float(t.get("avg_sentiment") or 0.0)
+            lines.append(f"  • {t['topic']} — n={t['count']}, sentiment={score:+.2f}")
+        return "\n".join(lines)
 
+    total_mentions = sum(int(t["count"]) for t in all_topics)
+    distinct_topics = len(all_topics)
 
-def _format_categorical(metric_key: str, days: int, dist: dict) -> str:
-    """Render categorical_distribution as a tight ASCII bar table."""
-    cats = [c for c in dist["categories"] if c["count"] > 0] or dist["categories"]
-    if not cats:
-        return f"По «{metric_key}» за {days} дн. данных нет."
-    max_count = max((c["count"] for c in cats), default=1) or 1
-    bar_width = 10
-    lines = [f"📊 Распределение «{metric_key}» за {days} дн. (n={dist['total']}):\n"]
-    label_width = max(len(c["value"]) for c in cats)
-    label_width = min(label_width, 24)
-    for c in cats:
-        label = c["value"][:label_width].ljust(label_width)
-        bar = "█" * round(c["count"] / max_count * bar_width)
-        bar = bar.ljust(bar_width)
-        pct = f"{c['pct'] * 100:5.1f}%"
-        lines.append(f"{label}  │ {bar} │ {c['count']:>3}  ({pct})")
-    if dist.get("unknown"):
-        lines.append(f"\n⚠ Вне списка enum: {dist['unknown']}")
-    return "```\n" + "\n".join(lines) + "\n```"
-
-
-@router.message(Command("metric"))
-async def cmd_metric(message: Message, command: CommandObject) -> None:
-    if not await require_admin(message):
-        return
-    args = (command.args or "").strip().split()
-    if not args:
-        await message.answer("Использование: /metric <metric_key> [days]")
-        return
-    metric_key = args[0]
-    days_arg = args[1] if len(args) > 1 else None
-    days_or_err = _parse_days(days_arg)
-    if isinstance(days_or_err, str):
-        await message.answer(days_or_err)
-        return
-    days = days_or_err
-    date_from, date_to = _window(days)
-
-    expected_type = await _question_expected_type(metric_key)
-    if expected_type is None:
-        await message.answer(f"Вопрос с metric_key «{metric_key}» не найден.")
-        return
-
-    # enum/boolean → распределение по категориям; number → агрегация
-    # avg/min/max; text — не агрегируется, подсказать альтернативы.
-    if expected_type in ("enum", "boolean"):
-        dist = await categorical_distribution(metric_key, date_from, date_to)
-        await message.answer(
-            _format_categorical(metric_key, days, dict(dist)),
-            parse_mode="Markdown",
-        )
-        return
-
-    if expected_type == "text":
-        await message.answer(
-            f"«{metric_key}» — текстовый вопрос, агрегировать число нельзя. "
-            f"Попробуй /find <запрос> для семантического поиска или /topics."
-        )
-        return
-
-    points = await aggregate_metric(metric_key, date_from, date_to, group_by="day")
-    if not points:
-        await message.answer(f"По «{metric_key}» за {days} дн. данных нет.")
-        return
-
-    lines = [f"📈 Метрика «{metric_key}» за {days} дн.\n"]
-    lines.append("дата       │ n  │ avg  │ min  │ max")
-    lines.append("───────────┼────┼──────┼──────┼──────")
-    for p in points:
-        avg = f"{p['avg']:.2f}" if p["avg"] is not None else "  — "
-        mn = f"{p['min']:.2f}" if p["min"] is not None else "  — "
-        mx = f"{p['max']:.2f}" if p["max"] is not None else "  — "
-        lines.append(f"{p['bucket']:10s} │ {p['count']:>2} │ {avg:>4} │ {mn:>4} │ {mx:>4}")
-    await message.answer("```\n" + "\n".join(lines) + "\n```", parse_mode="Markdown")
-
-
-# --------------------------------------------------------------------------- #
-# /topics [days]
+    parts = [
+        f"🏷 Топики за {days} дн.",
+        f"Всего упоминаний: {total_mentions} · уникальных топиков: {distinct_topics}",
+        "",
+        _section("💚 Позитивные:", positive),
+        "",
+        _section("😐 Нейтральные:", neutral),
+        "",
+        _section("❤️‍🩹 Негативные:", negative),
+    ]
+    return "\n".join(parts)
 
 
 @router.message(Command("topics"))
@@ -209,107 +104,5 @@ async def cmd_topics(message: Message, command: CommandObject) -> None:
         return
     days = days_or_err
     date_from, date_to = _window(days)
-    pos = await topic_histogram(date_from, date_to, sentiment_filter="positive")
-    neg = await topic_histogram(date_from, date_to, sentiment_filter="negative")
-    pos_lines = "\n".join(f"  • {t['topic']} (n={t['count']})" for t in pos[:5]) or "  —"
-    neg_lines = "\n".join(f"  • {t['topic']} (n={t['count']})" for t in neg[:5]) or "  —"
-    await message.answer(
-        f"🏷 Топики за {days} дн.\n\nПоложительные:\n{pos_lines}\n\nОтрицательные:\n{neg_lines}"
-    )
-
-
-# --------------------------------------------------------------------------- #
-# /find <natural query>
-
-
-@router.message(Command("find"))
-async def cmd_find(message: Message, command: CommandObject) -> None:
-    if not await require_admin(message):
-        return
-    query = (command.args or "").strip()
-    if not query:
-        await message.answer("Использование: /find <natural query>")
-        return
-    try:
-        hits = await semantic_search(query, top_k=10)
-    except ValueError as exc:
-        await message.answer(f"Поиск не удался: {exc}")
-        return
-    if not hits:
-        await message.answer(f"По запросу «{query}» похожих сессий не нашёл.")
-        return
-
-    lines = [f"🔎 Похожие сессии для «{query}» (top {len(hits)}):\n"]
-    for i, h in enumerate(hits, 1):
-        snippet = (h["summary_text"] or "").strip().replace("\n", " ")[:160]
-        sent = h["sentiment"] or "—"
-        date = (h["started_at"] or "")[:10]
-        client = h["client_id"] if h["client_id"] is not None else "—"
-        lines.append(
-            f"{i}. [{date}] sentiment={sent} score={h['score']:.2f} client={client}\n   {snippet}"
-        )
-    await message.answer("\n".join(lines))
-
-
-# --------------------------------------------------------------------------- #
-# /clients <telegram_id>
-
-
-@router.message(Command("clients"))
-async def cmd_clients(message: Message, command: CommandObject) -> None:
-    if not await require_admin(message):
-        return
-    arg = (command.args or "").strip()
-    if not arg:
-        await message.answer("Использование: /clients <telegram_id>")
-        return
-    try:
-        telegram_id = int(arg)
-    except ValueError:
-        await message.answer(f"telegram_id должен быть числом, не {arg!r}.")
-        return
-    try:
-        p = await client_profile(telegram_id)
-    except LookupError:
-        await message.answer(f"Клиент {telegram_id} не найден.")
-        return
-
-    name = p["name"] or "(без имени)"
-    topics = "\n".join(f"  • {t['topic']} (n={t['count']})" for t in p["top_topics"][:5]) or "  —"
-    cards = (
-        "\n".join(f"  • {(c.get('summary_text') or '').strip()[:200]}" for c in p["recent_cards"])
-        or "  (карточек ещё нет)"
-    )
-    await message.answer(
-        f"👤 {name} (id={telegram_id})\n\n"
-        f"Сессий: {p['sessions_count']}\n"
-        f"Последняя: {p['last_session_at'] or '—'}\n"
-        f"Avg sentiment: {_fmt_sentiment(p['avg_sentiment'])}\n\n"
-        f"Топ-топики:\n{topics}\n\n"
-        f"Recent cards:\n{cards}"
-    )
-
-
-# --------------------------------------------------------------------------- #
-# /ask <natural-language question>
-
-
-@router.message(Command("ask"))
-async def cmd_ask(message: Message, command: CommandObject) -> None:
-    if not await require_admin(message):
-        return
-    question = (command.args or "").strip()
-    if not question:
-        await message.answer(
-            "Использование: /ask <вопрос>. Например: /ask какие топ-3 жалобы за неделю?"
-        )
-        return
-    answer = await answer_admin_question(question)
-    text = answer.answer_text.strip() or "Готов помочь дальше."
-    if answer.chart_text:
-        await message.answer(
-            f"{text}\n\n```\n{answer.chart_text}\n```",
-            parse_mode="Markdown",
-        )
-    else:
-        await message.answer(text)
+    rows = await topic_histogram(date_from, date_to)
+    await message.answer(_format_topics_report(days, [dict(r) for r in rows]))

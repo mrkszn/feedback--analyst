@@ -1,9 +1,8 @@
 from aiogram import F, Router
 from aiogram.filters import Command, CommandObject, CommandStart
-from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from bot_admin.keyboards import BTN_ADMINS, AdminMode, main_menu_keyboard
+from bot_admin.keyboards import BTN_ADMINS, main_menu_keyboard
 from services.admin_auth import claim_admin, is_admin
 
 router = Router(name="admin_auth")
@@ -20,23 +19,15 @@ GREETING = (
     "Снизу — быстрый доступ к основному:\n"
     "📋 Вопросы — посмотреть пул\n"
     "➕ Добавить — создать новый вопрос\n"
-    "📊 Режим: Аналитика — переключиться на аналитический агент "
-    "(свободный текст → ответы по реальным данным)\n"
+    "📊 Статистика — отчёт по отзывам за период\n"
     "👥 Админы — посмотреть команду\n\n"
-    "Слэш-команды (/questions, /add_question, /ask, /insights, /topics, "
-    "/metric, /find, /clients, /invite_admin …) работают всегда — "
-    "независимо от режима."
+    "Команды: /questions, /add_question, /statistics, /topics, "
+    "/invite_admin, /miniapp."
 )
 
 
-async def _current_mode(state: FSMContext) -> AdminMode:
-    data = await state.get_data()
-    mode = data.get("admin_mode", "admin")
-    return "analytics" if mode == "analytics" else "admin"
-
-
 @router.message(Command("claim"))
-async def admin_claim(message: Message, command: CommandObject, state: FSMContext) -> None:
+async def admin_claim(message: Message, command: CommandObject) -> None:
     user = message.from_user
     if user is None:
         return
@@ -48,7 +39,7 @@ async def admin_claim(message: Message, command: CommandObject, state: FSMContex
     if ok:
         await message.answer(
             "Готово, вы добавлены в admin_users.",
-            reply_markup=main_menu_keyboard(current_mode=await _current_mode(state)),
+            reply_markup=main_menu_keyboard(),
         )
     else:
         await message.answer(
@@ -57,22 +48,19 @@ async def admin_claim(message: Message, command: CommandObject, state: FSMContex
 
 
 @router.message(CommandStart())
-async def admin_start(message: Message, state: FSMContext) -> None:
+async def admin_start(message: Message) -> None:
     user = message.from_user
     if user is None:
         return
     if not await is_admin(user.id):
         await message.answer(CLAIM_HINT)
         return
-    await message.answer(
-        GREETING,
-        reply_markup=main_menu_keyboard(current_mode=await _current_mode(state)),
-    )
+    await message.answer(GREETING, reply_markup=main_menu_keyboard())
 
 
 # `📋 Вопросы` and `➕ Добавить` are wired in `bot_admin/handlers/questions.py`
 # next to the slash-command handlers they reuse (FSMContext is needed there).
-# The mode-toggle button (📊 / 🛠) is wired in `bot_admin/handlers/mode.py`.
+# `📊 Статистика` is wired in `bot_admin/handlers/statistics.py`.
 
 
 @router.message(F.text == BTN_ADMINS)

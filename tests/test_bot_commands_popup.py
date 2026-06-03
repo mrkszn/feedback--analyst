@@ -37,10 +37,16 @@ def test_admin_commands_cover_phase_2a_baseline() -> None:
         assert required in cmds, f"admin popup menu missing /{required}"
 
 
-def test_admin_commands_include_phase_3_analytics() -> None:
+def test_admin_commands_include_analytics_surface() -> None:
+    """После Phase-5 cleanup в popup-меню только /statistics + /topics.
+
+    Старые /ask /insights /metric /find /clients убраны до редизайна агента.
+    """
     cmds = _commands_dict(ADMIN_COMMANDS)
-    for required in ("ask", "insights", "metric", "topics", "find", "clients"):
-        assert required in cmds, f"admin popup menu missing Phase-3 /{required}"
+    for required in ("statistics", "topics"):
+        assert required in cmds, f"admin popup menu missing /{required}"
+    for removed in ("ask", "insights", "metric", "find", "clients"):
+        assert removed not in cmds, f"/{removed} should be removed from popup"
 
 
 def test_command_descriptions_under_telegram_limit() -> None:
