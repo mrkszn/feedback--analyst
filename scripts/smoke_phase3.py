@@ -1,5 +1,5 @@
-"""Phase 3 analytics smoke — exercises services/analytics + agent/admin_ask
-against the live dev DB (Supabase + Pinecone + OpenAI).
+"""Phase 3 analytics smoke — exercises services/analytics against the live
+dev DB (Supabase + Pinecone + OpenAI).
 
 Запуск:
     uv run python scripts/smoke_phase3.py

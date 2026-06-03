@@ -260,11 +260,13 @@ async def ask(
     _admin_id: Annotated[int, Depends(current_admin)],
 ) -> AskResponse:
     # Local import — avoid pulling LangChain at api module-load time.
-    from agent.nodes.admin_ask import answer_admin_question
+    from agent.analytics_agent.runner import answer_v2
 
-    answer = await answer_admin_question(body.question, conversation_history=body.history)
+    answer = await answer_v2(body.question, history=body.history)
     return AskResponse(
         answer_text=answer.answer_text,
         tools_used=answer.tools_used,
         chart_text=answer.chart_text,
+        interpretation=answer.interpretation,
+        clarification_needed=answer.clarification_needed,
     )

@@ -139,6 +139,8 @@ class AskResponse(BaseModel):
     answer_text: str
     tools_used: list[str]
     chart_text: str | None = None
+    interpretation: str = ""
+    clarification_needed: bool = False
 
 
 # --------------------------------------------------------------------------- #

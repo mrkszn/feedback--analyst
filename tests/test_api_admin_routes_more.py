@@ -223,13 +223,15 @@ def test_ask_returns_answer(client: TestClient) -> None:
     token = _token()
     fake_answer = SimpleNamespace(
         answer_text="За неделю поступило 3 жалобы на ожидание.",
-        tools_used=["topic_histogram_tool"],
+        tools_used=["topic_histogram"],
         chart_text=None,
+        interpretation="Считаю негативные сессии за последние 7 дней.",
+        clarification_needed=False,
     )
     with (
         patch("api.deps.auth.is_admin", return_value=True),
         patch(
-            "agent.nodes.admin_ask.answer_admin_question",
+            "agent.analytics_agent.runner.answer_v2",
             return_value=fake_answer,
         ) as m,
     ):
@@ -241,8 +243,10 @@ def test_ask_returns_answer(client: TestClient) -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert "жалобы" in body["answer_text"]
-    assert body["tools_used"] == ["topic_histogram_tool"]
+    assert body["tools_used"] == ["topic_histogram"]
     assert body["chart_text"] is None
+    assert body["interpretation"].startswith("Считаю")
+    assert body["clarification_needed"] is False
     m.assert_called_once()
 
 
