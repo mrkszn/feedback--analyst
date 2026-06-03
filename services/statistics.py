@@ -16,11 +16,13 @@ from __future__ import annotations
 import asyncio
 from collections import defaultdict
 from datetime import datetime
-from typing import Any, TypedDict, cast
+from typing import Any, Literal, TypedDict, cast
 
 from supabase import Client
 
 from db.client import get_supabase
+
+Sentiment = Literal["positive", "neutral", "negative"]
 
 _SENTIMENT_SCORE: dict[str, float] = {
     "positive": 1.0,
@@ -426,3 +428,86 @@ async def full_report(
         metrics=metrics,
         recent_sessions=recent,
     )
+
+
+# --------------------------------------------------------------------------- #
+# recent_sessions
+
+
+async def recent_sessions(
+    limit: int = 5,
+    sentiment: Sentiment | None = None,
+    *,
+    db: Client | None = None,
+) -> list[RecentSession]:
+    """Последние N сессий (по started_at desc), опц. с фильтром по sentiment.
+
+    Фильтр по `feedback_summary.sentiment` применяется в Python после выборки
+    (Supabase REST неудобно фильтрует по вложенному JSONB). summary_text берётся
+    из `client_cards` по session_id, fallback — `feedback_summary.summary`.
+    """
+    if limit <= 0:
+        raise ValueError("limit must be positive")
+    if sentiment is not None and sentiment not in _SENTIMENT_SCORE:
+        raise ValueError(f"unknown sentiment {sentiment!r}")
+
+    db = db or get_supabase()
+
+    def _q_sessions() -> Any:
+        return (
+            db.table("sessions")
+            .select("id, client_id, started_at, feedback_summary")
+            .order("started_at", desc=True)
+            .limit(limit * 4)
+            .execute()
+        )
+
+    s_resp = await asyncio.to_thread(_q_sessions)
+    sessions = list(s_resp.data or [])
+
+    selected: list[dict[str, Any]] = []
+    for s in sessions:
+        summary = s.get("feedback_summary") or {}
+        sent = summary.get("sentiment") if isinstance(summary, dict) else None
+        if sentiment is not None and sent != sentiment:
+            continue
+        selected.append(s)
+        if len(selected) >= limit:
+            break
+
+    if not selected:
+        return []
+
+    session_ids = [str(s["id"]) for s in selected]
+
+    def _q_cards() -> Any:
+        return (
+            db.table("client_cards")
+            .select("session_id, summary_text")
+            .in_("session_id", session_ids)
+            .execute()
+        )
+
+    c_resp = await asyncio.to_thread(_q_cards)
+    cards_by_sid: dict[str, str] = {
+        str(c.get("session_id") or ""): str(c.get("summary_text") or "")
+        for c in (c_resp.data or [])
+    }
+
+    out: list[RecentSession] = []
+    for s in selected:
+        summary = s.get("feedback_summary") or {}
+        sent = summary.get("sentiment") if isinstance(summary, dict) else None
+        sid = str(s.get("id") or "")
+        card_text = cards_by_sid.get(sid, "")
+        if not card_text and isinstance(summary, dict):
+            card_text = str(summary.get("summary") or "")
+        out.append(
+            RecentSession(
+                started_at=str(s.get("started_at")) if s.get("started_at") else None,
+                sentiment=str(sent) if sent else None,
+                summary=card_text,
+                client_id=int(s["client_id"]) if s.get("client_id") is not None else None,
+            )
+        )
+    return out
