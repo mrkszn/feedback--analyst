@@ -44,7 +44,9 @@ if [[ "${2:-}" == "--resume" ]]; then
     [[ -n "$RESUME_BRANCH" ]] || { echo "ERROR: --resume требует <branch> аргумент"; exit 1; }
 fi
 
-PROJECT_ROOT="/Users/markdekker/Desktop/Need eat bot/telegram-waiter"
+# PROJECT_ROOT резолвится от самого скрипта — был баг с захардкоженным
+# /Users/markdekker/Desktop/Need eat bot/... после переезда проекта.
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 case "$MODE" in
     --smoke)
         PROMPT_FILE="$PROJECT_ROOT/scripts/_smoke_prompt.md"

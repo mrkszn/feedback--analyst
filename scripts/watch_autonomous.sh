@@ -11,7 +11,7 @@
 set -euo pipefail
 
 SESSION="waiter-auto"
-PROJECT_ROOT="/Users/markdekker/Desktop/Need eat bot/telegram-waiter"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOOP="${1:-}"
 
 snapshot() {

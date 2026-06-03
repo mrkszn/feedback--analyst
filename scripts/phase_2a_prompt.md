@@ -107,7 +107,7 @@ Matcher Claude Code НЕ разбирает compound через `;`, `&&`, `|`, 
 
 Когда ты пишешь промт для `team-lead` через `Agent` tool, **включай в него эти 3 правила** дословно. Не предполагай, что team-lead «по умолчанию знает». Пример обязательной вставки в team-lead-промт:
 
-> **Bash discipline (критично):** не используй compound-команды (`;`, `&&`, `|`). Один Bash-вызов = одна команда. Все пути — внутри `/Users/markdekker/Desktop/Need eat bot/telegram-waiter/`. Compound будет блокировать сессию ожиданием подтверждения от человека.
+> **Bash discipline (критично):** не используй compound-команды (`;`, `&&`, `|`). Один Bash-вызов = одна команда. Все пути — внутри `/Users/markdekker/Need eat bot/telegram-waiter/`. Compound будет блокировать сессию ожиданием подтверждения от человека.
 
 То же — для implementer'а, tester'а (reviewer — read-only Explore, ему bash почти не нужен).
 

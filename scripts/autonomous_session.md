@@ -57,7 +57,7 @@
 
 5. **Локально верифицируй** перед движением дальше (выполни сам, не доверяй на слово):
    ```
-   cd /Users/markdekker/Desktop/Need\ eat\ bot/telegram-waiter
+   cd /Users/markdekker/Need\ eat\ bot/telegram-waiter
    uv run ruff check .
    uv run mypy .
    uv run pytest -q
@@ -135,7 +135,7 @@
 
 ### Файловая система — scope
 
-- ❌ **Любые** правки файлов вне `/Users/markdekker/Desktop/Need eat bot/telegram-waiter/`. Сюда входят (но не ограничены): `~/.zshrc`, `~/.bashrc`, `~/.gitconfig`, `~/.ssh/*`, `~/.claude/*` (вне локального `.claude/settings.local.json`), `/etc/*`, `/usr/local/*`, `~/Library/*`, любые файлы в `~/Desktop/` (кроме нашей папки), `~/Documents/`, etc.
+- ❌ **Любые** правки файлов вне `/Users/markdekker/Need eat bot/telegram-waiter/`. Сюда входят (но не ограничены): `~/.zshrc`, `~/.bashrc`, `~/.gitconfig`, `~/.ssh/*`, `~/.claude/*` (вне локального `.claude/settings.local.json`), `/etc/*`, `/usr/local/*`, `~/Library/*`, любые файлы вне нашей папки, `~/Documents/`, etc.
 - ❌ Любая модификация `.env*` файлов (кроме `.env.example`, и то — только если архитектурно нужно).
 - ❌ Изменения в `telegram-waiter/.claude/settings.local.json` (это safety net, расширяется launcher'ом, не трогаем).
 - ❌ `rm -rf` чего-либо вне `telegram-waiter/tmp/`. Если нужно почистить — используй `find <path> -delete` точечно.
