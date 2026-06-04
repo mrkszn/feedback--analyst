@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.types import Message
 
-from bot_admin.handlers.questions import (
+from presentations.telegram_admin.handlers.questions import (
     _natural_language_exit_check,
     admin_fsm_exit_cancel,
     admin_fsm_exit_keep,
@@ -81,7 +81,7 @@ async def test_structured_input_still_creates_question() -> None:
     msg = _mk_message("food_liked|boolean|Понравилась ли еда?")
     state = _mk_state()
     with patch(
-        "bot_admin.handlers.questions.create_question",
+        "presentations.telegram_admin.handlers.questions.create_question",
         new=AsyncMock(return_value={"id": "u1"}),
     ) as cq:
         await admin_question_add_save(msg, state)
@@ -93,9 +93,12 @@ async def test_exit_cancel_clears_state_and_forwards_to_agent() -> None:
     cb = _mk_callback("fsmexit:cancel")
     state = _mk_state(initial={"_pending_nl": "сколько у меня вопросов?"})
     with (
-        patch("bot_admin.handlers.questions.is_admin", new=AsyncMock(return_value=True)),
         patch(
-            "bot_admin.handlers.admin_agent.run_admin_agent",
+            "presentations.telegram_admin.handlers.questions.is_admin",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "presentations.telegram_admin.handlers.admin_agent.run_admin_agent",
             new=AsyncMock(return_value="Активных вопросов 3."),
         ) as agent,
     ):
@@ -109,7 +112,9 @@ async def test_exit_cancel_clears_state_and_forwards_to_agent() -> None:
 async def test_exit_cancel_without_pending_text_just_clears() -> None:
     cb = _mk_callback("fsmexit:cancel")
     state = _mk_state()
-    with patch("bot_admin.handlers.questions.is_admin", new=AsyncMock(return_value=True)):
+    with patch(
+        "presentations.telegram_admin.handlers.questions.is_admin", new=AsyncMock(return_value=True)
+    ):
         await admin_fsm_exit_cancel(cb, state)
     state.clear.assert_awaited_once()
 
@@ -117,7 +122,9 @@ async def test_exit_cancel_without_pending_text_just_clears() -> None:
 async def test_exit_keep_stays_in_state_and_reprompts() -> None:
     cb = _mk_callback("fsmexit:keep")
     state = _mk_state(initial={"_pending_nl": "..."})
-    with patch("bot_admin.handlers.questions.is_admin", new=AsyncMock(return_value=True)):
+    with patch(
+        "presentations.telegram_admin.handlers.questions.is_admin", new=AsyncMock(return_value=True)
+    ):
         await admin_fsm_exit_keep(cb, state)
     state.clear.assert_not_called()
     # Re-prompt sent

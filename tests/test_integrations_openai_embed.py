@@ -12,7 +12,7 @@ import pytest
 from openai import APIConnectionError, RateLimitError
 from pydantic import SecretStr
 
-from integrations import openai_embed
+from core.integrations import openai_embed
 
 
 def _make_emb_instance(

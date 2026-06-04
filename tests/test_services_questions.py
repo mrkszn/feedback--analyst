@@ -3,7 +3,7 @@ from uuid import uuid4
 
 import pytest
 
-from services.questions import (
+from core.services.questions import (
     create_question,
     deactivate_all_questions,
     delete_question,

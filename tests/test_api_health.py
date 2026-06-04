@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from api.main import app
+from presentations.http_api.main import app
 
 
 def test_health_returns_ok() -> None:

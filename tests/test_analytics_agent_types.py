@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from agent.analytics_agent.types import (
+from core.agent.analytics_agent.types import (
     AnalysisPlan,
     AnalyticsAnswer,
     DataBlock,

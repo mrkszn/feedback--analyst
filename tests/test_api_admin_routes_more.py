@@ -9,9 +9,9 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from api.auth.jwt import issue_token
-from api.main import create_app
 from config import settings
+from presentations.http_api.auth.jwt import issue_token
+from presentations.http_api.main import create_app
 
 SECRET = "test-jwt-secret-32-bytes-or-more-aaaa"
 
@@ -55,8 +55,8 @@ def test_questions_returns_catalog(client: TestClient) -> None:
         },
     ]
     with (
-        patch("api.deps.auth.is_admin", return_value=True),
-        patch("api.routes.admin.list_questions", return_value=fake_rows) as m,
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch("presentations.http_api.routes.admin.list_questions", return_value=fake_rows) as m,
     ):
         resp = client.get(
             "/admin/questions",
@@ -77,8 +77,8 @@ def test_questions_returns_catalog(client: TestClient) -> None:
 def test_questions_forwards_active_only_false(client: TestClient) -> None:
     token = _token()
     with (
-        patch("api.deps.auth.is_admin", return_value=True),
-        patch("api.routes.admin.list_questions", return_value=[]) as m,
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch("presentations.http_api.routes.admin.list_questions", return_value=[]) as m,
     ):
         resp = client.get(
             "/admin/questions",
@@ -104,8 +104,8 @@ def test_questions_normalizes_missing_expected_type(client: TestClient) -> None:
         }
     ]
     with (
-        patch("api.deps.auth.is_admin", return_value=True),
-        patch("api.routes.admin.list_questions", return_value=fake_rows),
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch("presentations.http_api.routes.admin.list_questions", return_value=fake_rows),
     ):
         resp = client.get(
             "/admin/questions",
@@ -139,8 +139,8 @@ def test_semantic_returns_hits(client: TestClient) -> None:
         },
     ]
     with (
-        patch("api.deps.auth.is_admin", return_value=True),
-        patch("api.routes.admin.semantic_search", return_value=fake_hits) as m,
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch("presentations.http_api.routes.admin.semantic_search", return_value=fake_hits) as m,
     ):
         resp = client.post(
             "/admin/semantic",
@@ -162,7 +162,7 @@ def test_semantic_requires_auth(client: TestClient) -> None:
 
 def test_semantic_rejects_invalid_top_k(client: TestClient) -> None:
     token = _token()
-    with patch("api.deps.auth.is_admin", return_value=True):
+    with patch("presentations.http_api.deps.auth.is_admin", return_value=True):
         resp = client.post(
             "/admin/semantic",
             json={"query": "x", "top_k": 0},
@@ -187,8 +187,8 @@ def test_client_profile_returns_profile(client: TestClient) -> None:
         "top_topics": [{"topic": "service", "count": 3, "avg_sentiment": 1.0}],
     }
     with (
-        patch("api.deps.auth.is_admin", return_value=True),
-        patch("api.routes.admin.client_profile", return_value=fake),
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch("presentations.http_api.routes.admin.client_profile", return_value=fake),
     ):
         resp = client.get(
             "/admin/clients/99",
@@ -204,8 +204,11 @@ def test_client_profile_returns_profile(client: TestClient) -> None:
 def test_client_profile_returns_404_on_lookup_error(client: TestClient) -> None:
     token = _token()
     with (
-        patch("api.deps.auth.is_admin", return_value=True),
-        patch("api.routes.admin.client_profile", side_effect=LookupError("client 1 not found")),
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch(
+            "presentations.http_api.routes.admin.client_profile",
+            side_effect=LookupError("client 1 not found"),
+        ),
     ):
         resp = client.get(
             "/admin/clients/1",
@@ -229,9 +232,9 @@ def test_ask_returns_answer(client: TestClient) -> None:
         clarification_needed=False,
     )
     with (
-        patch("api.deps.auth.is_admin", return_value=True),
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
         patch(
-            "agent.analytics_agent.runner.answer_v2",
+            "core.agent.analytics_agent.runner.answer_v2",
             return_value=fake_answer,
         ) as m,
     ):

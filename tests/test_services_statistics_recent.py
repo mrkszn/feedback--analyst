@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from services.statistics import recent_sessions
+from core.services.statistics import recent_sessions
 
 # --------------------------------------------------------------------------- #
 # fake supabase client (copied from test_services_statistics.py — keeps tests
@@ -127,7 +127,7 @@ async def test_recent_sessions_happy_limits_and_summary_source() -> None:
         }
     )
 
-    with patch("services.statistics.get_supabase", return_value=db):
+    with patch("core.services.statistics.get_supabase", return_value=db):
         result = await recent_sessions(limit=2, db=None)
 
     assert len(result) == 2
@@ -168,7 +168,7 @@ async def test_recent_sessions_sentiment_filter() -> None:
         }
     )
 
-    with patch("services.statistics.get_supabase", return_value=db):
+    with patch("core.services.statistics.get_supabase", return_value=db):
         result = await recent_sessions(limit=5, sentiment="negative", db=None)
 
     assert len(result) == 1
@@ -198,7 +198,7 @@ async def test_recent_sessions_limit_exceeds_available() -> None:
         }
     )
 
-    with patch("services.statistics.get_supabase", return_value=db):
+    with patch("core.services.statistics.get_supabase", return_value=db):
         result = await recent_sessions(limit=10, db=None)
 
     assert len(result) == 2
@@ -217,7 +217,7 @@ async def test_recent_sessions_invalid_sentiment_raises() -> None:
 async def test_recent_sessions_empty_db() -> None:
     db = _FakeDB({"sessions": [], "client_cards": []})
 
-    with patch("services.statistics.get_supabase", return_value=db):
+    with patch("core.services.statistics.get_supabase", return_value=db):
         result = await recent_sessions(limit=5, db=None)
 
     assert result == []

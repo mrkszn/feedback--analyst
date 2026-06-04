@@ -12,7 +12,7 @@ import pytest
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import File
 
-from utils.voice_download import download_voice_to_tmp
+from core.utils.voice_download import download_voice_to_tmp
 
 
 def _make_bot(file_path: str | None) -> AsyncMock:

@@ -22,7 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from services.analytics import (
+from core.services.analytics import (
     aggregate_metric,
     client_profile,
     semantic_search,

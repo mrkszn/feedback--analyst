@@ -7,8 +7,8 @@
 
 from aiogram.types import BotCommand
 
-from bot_admin.__main__ import ADMIN_COMMANDS
-from bot_guest.__main__ import GUEST_COMMANDS
+from channels.telegram.guest_bot.__main__ import GUEST_COMMANDS
+from presentations.telegram_admin.__main__ import ADMIN_COMMANDS
 
 
 def _commands_dict(items: list[BotCommand]) -> dict[str, str]:

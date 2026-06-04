@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from services.admin_auth import claim_admin, is_admin
+from core.services.admin_auth import claim_admin, is_admin
 
 
 def _mk_db_select(data: list[dict], count: int | None = None) -> MagicMock:

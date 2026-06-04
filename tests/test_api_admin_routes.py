@@ -13,9 +13,9 @@ from urllib.parse import urlencode
 import pytest
 from fastapi.testclient import TestClient
 
-from api.auth.jwt import issue_token
-from api.main import create_app
 from config import settings
+from presentations.http_api.auth.jwt import issue_token
+from presentations.http_api.main import create_app
 
 VALID_BOT_TOKEN = "999:fake-admin-bot-token"
 SECRET = "test-jwt-secret-32-bytes-or-more-aaaa"
@@ -57,7 +57,7 @@ def _admin_token(telegram_id: int = 7) -> str:
 
 def test_auth_succeeds_for_known_admin(client: TestClient) -> None:
     init_data = _sign_initdata(7)
-    with patch("api.routes.admin.is_admin", return_value=True):
+    with patch("presentations.http_api.routes.admin.is_admin", return_value=True):
         resp = client.post("/admin/auth", json={"init_data": init_data})
     assert resp.status_code == 200
     body = resp.json()
@@ -73,7 +73,7 @@ def test_auth_rejects_bad_initdata(client: TestClient) -> None:
 
 def test_auth_rejects_non_admin(client: TestClient) -> None:
     init_data = _sign_initdata(99)
-    with patch("api.routes.admin.is_admin", return_value=False):
+    with patch("presentations.http_api.routes.admin.is_admin", return_value=False):
         resp = client.post("/admin/auth", json={"init_data": init_data})
     assert resp.status_code == 403
     assert resp.json()["detail"] == "not an admin"
@@ -102,7 +102,7 @@ def test_overview_rejects_bad_jwt(client: TestClient) -> None:
 
 def test_overview_rejects_revoked_admin(client: TestClient) -> None:
     token = _admin_token(7)
-    with patch("api.deps.auth.is_admin", return_value=False):
+    with patch("presentations.http_api.deps.auth.is_admin", return_value=False):
         resp = client.get(
             "/admin/overview",
             params={"date_from": "2026-01-01", "date_to": "2026-01-31"},
@@ -125,8 +125,8 @@ def test_overview_returns_summary(client: TestClient) -> None:
         "top_negative_topics": [{"topic": "wait", "count": 3, "avg_sentiment": -1.0}],
     }
     with (
-        patch("api.deps.auth.is_admin", return_value=True),
-        patch("api.routes.admin.summary_overview", return_value=fake) as m,
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch("presentations.http_api.routes.admin.summary_overview", return_value=fake) as m,
     ):
         resp = client.get(
             "/admin/overview",
@@ -142,7 +142,7 @@ def test_overview_returns_summary(client: TestClient) -> None:
 
 def test_overview_rejects_inverted_range(client: TestClient) -> None:
     token = _admin_token(7)
-    with patch("api.deps.auth.is_admin", return_value=True):
+    with patch("presentations.http_api.deps.auth.is_admin", return_value=True):
         resp = client.get(
             "/admin/overview",
             params={"date_from": "2026-02-01", "date_to": "2026-01-01"},
@@ -158,8 +158,8 @@ def test_overview_rejects_inverted_range(client: TestClient) -> None:
 def test_metrics_returns_404_for_unknown_metric_key(client: TestClient) -> None:
     token = _admin_token(7)
     with (
-        patch("api.deps.auth.is_admin", return_value=True),
-        patch("api.routes.admin._question_expected_type", return_value=None),
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch("presentations.http_api.routes.admin._question_expected_type", return_value=None),
     ):
         resp = client.get(
             "/admin/metrics",
@@ -179,9 +179,9 @@ def test_metrics_returns_points_for_number_question(client: TestClient) -> None:
         {"bucket": "2026-01-01", "count": 3, "avg": 4.5, "min": 3.0, "max": 5.0},
     ]
     with (
-        patch("api.deps.auth.is_admin", return_value=True),
-        patch("api.routes.admin._question_expected_type", return_value="number"),
-        patch("api.routes.admin.aggregate_metric", return_value=fake_points),
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch("presentations.http_api.routes.admin._question_expected_type", return_value="number"),
+        patch("presentations.http_api.routes.admin.aggregate_metric", return_value=fake_points),
     ):
         resp = client.get(
             "/admin/metrics",
@@ -213,9 +213,11 @@ def test_metrics_returns_distribution_for_enum_question(client: TestClient) -> N
         "enum_values": ["18-25", "26-35"],
     }
     with (
-        patch("api.deps.auth.is_admin", return_value=True),
-        patch("api.routes.admin._question_expected_type", return_value="enum"),
-        patch("api.routes.admin.categorical_distribution", return_value=fake_dist),
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch("presentations.http_api.routes.admin._question_expected_type", return_value="enum"),
+        patch(
+            "presentations.http_api.routes.admin.categorical_distribution", return_value=fake_dist
+        ),
     ):
         resp = client.get(
             "/admin/metrics",
@@ -242,8 +244,8 @@ def test_topics_returns_histogram(client: TestClient) -> None:
     token = _admin_token(7)
     fake = [{"topic": "noise", "count": 2, "avg_sentiment": -1.0}]
     with (
-        patch("api.deps.auth.is_admin", return_value=True),
-        patch("api.routes.admin.topic_histogram", return_value=fake) as m,
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch("presentations.http_api.routes.admin.topic_histogram", return_value=fake) as m,
     ):
         resp = client.get(
             "/admin/topics",

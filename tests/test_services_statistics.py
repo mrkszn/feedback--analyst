@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-from services.statistics import (
+from core.services.statistics import (
     FullReport,
     TopicRow,
     _classify_topic,
@@ -333,7 +333,7 @@ async def test_full_report_aggregates_sessions_and_topics() -> None:
     date_from = datetime(2026, 5, 29, tzinfo=UTC)
     date_to = datetime(2026, 6, 2, tzinfo=UTC)
 
-    with patch("services.statistics.get_supabase", return_value=db):
+    with patch("core.services.statistics.get_supabase", return_value=db):
         report = await full_report(date_from, date_to, period_label="7 дней")
 
     assert report["activity"]["sessions_started"] == 3
@@ -362,7 +362,7 @@ async def test_full_report_empty_database() -> None:
     db = _FakeDB({"sessions": [], "client_cards": [], "questions": []})
     date_from = None
     date_to = datetime(2026, 6, 2, tzinfo=UTC)
-    with patch("services.statistics.get_supabase", return_value=db):
+    with patch("core.services.statistics.get_supabase", return_value=db):
         report = await full_report(date_from, date_to, period_label="всё время")
     assert report["activity"]["sessions_started"] == 0
     assert report["sentiment_total"] == 0
@@ -402,7 +402,7 @@ async def test_full_report_none_date_from_uses_earliest() -> None:
         }
     )
     date_to = datetime(2026, 6, 2, tzinfo=UTC)
-    with patch("services.statistics.get_supabase", return_value=db):
+    with patch("core.services.statistics.get_supabase", return_value=db):
         report = await full_report(None, date_to, period_label="всё время")
     assert report["activity"]["sessions_started"] == 1
     assert (report["date_from"] or "").startswith("2026-01-01")

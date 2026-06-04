@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.types import BufferedInputFile, Message
 
-from bot_admin.handlers.statistics import cb_statistics_csv
+from presentations.telegram_admin.handlers.statistics import cb_statistics_csv
 
 
 def _mk_message() -> MagicMock:
@@ -59,13 +59,16 @@ def _empty_report() -> dict:
 async def test_csv_sends_document_with_csv_filename() -> None:
     cb = _mk_callback("stats_csv:7d")
     with (
-        patch("bot_admin.handlers.statistics.is_admin", new=AsyncMock(return_value=True)),
         patch(
-            "bot_admin.handlers.statistics.full_report",
+            "presentations.telegram_admin.handlers.statistics.is_admin",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "presentations.telegram_admin.handlers.statistics.full_report",
             new=AsyncMock(return_value=_empty_report()),
         ) as full,
         patch(
-            "bot_admin.handlers.statistics.build_csv_report",
+            "presentations.telegram_admin.handlers.statistics.build_csv_report",
             return_value="# Sessions\n",
         ) as build,
     ):
@@ -84,9 +87,14 @@ async def test_csv_sends_document_with_csv_filename() -> None:
 async def test_csv_non_admin_sends_nothing() -> None:
     cb = _mk_callback("stats_csv:7d")
     with (
-        patch("bot_admin.handlers.statistics.is_admin", new=AsyncMock(return_value=False)),
-        patch("bot_admin.handlers.statistics.full_report", new=AsyncMock()) as full,
-        patch("bot_admin.handlers.statistics.build_csv_report") as build,
+        patch(
+            "presentations.telegram_admin.handlers.statistics.is_admin",
+            new=AsyncMock(return_value=False),
+        ),
+        patch(
+            "presentations.telegram_admin.handlers.statistics.full_report", new=AsyncMock()
+        ) as full,
+        patch("presentations.telegram_admin.handlers.statistics.build_csv_report") as build,
     ):
         await cb_statistics_csv(cb)
     full.assert_not_awaited()
@@ -98,9 +106,14 @@ async def test_csv_non_admin_sends_nothing() -> None:
 async def test_csv_unknown_period_sends_nothing() -> None:
     cb = _mk_callback("stats_csv:weird")
     with (
-        patch("bot_admin.handlers.statistics.is_admin", new=AsyncMock(return_value=True)),
-        patch("bot_admin.handlers.statistics.full_report", new=AsyncMock()) as full,
-        patch("bot_admin.handlers.statistics.build_csv_report") as build,
+        patch(
+            "presentations.telegram_admin.handlers.statistics.is_admin",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "presentations.telegram_admin.handlers.statistics.full_report", new=AsyncMock()
+        ) as full,
+        patch("presentations.telegram_admin.handlers.statistics.build_csv_report") as build,
     ):
         await cb_statistics_csv(cb)
     full.assert_not_awaited()

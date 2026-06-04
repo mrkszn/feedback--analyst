@@ -13,7 +13,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from agent.nodes.dialogue import DialogueTurn, continue_dialogue
+from core.agent.nodes.dialogue import DialogueTurn, continue_dialogue
 
 
 async def test_continue_dialogue_returns_valid_turn(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -27,7 +27,7 @@ async def test_continue_dialogue_returns_valid_turn(monkeypatch: pytest.MonkeyPa
         assert kwargs.get("response_model") is DialogueTurn
         return expected
 
-    monkeypatch.setattr("agent.nodes.dialogue.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.dialogue.chat_completion", fake_chat)
 
     result = await continue_dialogue(
         feedback_summary='{"summary":"x","sentiment":"positive","topics":["food"],"emotion":"joy"}',
@@ -57,7 +57,7 @@ async def test_continue_dialogue_forces_offer_survey_at_cap(
     async def fake_chat(messages, **kwargs):
         return llm_wants_to_continue
 
-    monkeypatch.setattr("agent.nodes.dialogue.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.dialogue.chat_completion", fake_chat)
 
     result = await continue_dialogue(
         feedback_summary="{}",
@@ -93,7 +93,7 @@ async def test_continue_dialogue_empty_history_first_turn(
     async def fake_chat(messages, **kwargs):
         return expected
 
-    monkeypatch.setattr("agent.nodes.dialogue.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.dialogue.chat_completion", fake_chat)
 
     result = await continue_dialogue(
         feedback_summary='{"summary":"good","sentiment":"positive","topics":[],"emotion":""}',

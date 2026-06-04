@@ -4,7 +4,7 @@ the Phase-5 cleanup (/insights, /metric, /find, /clients, /ask removed)."""
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from bot_admin.handlers.analytics_commands import (
+from presentations.telegram_admin.handlers.analytics_commands import (
     _format_topics_report,
     _parse_days,
     cmd_topics,
@@ -68,7 +68,7 @@ def test_format_topics_report_empty() -> None:
 async def test_cmd_topics_requires_admin() -> None:
     msg = _mk_message()
     with patch(
-        "bot_admin.handlers.analytics_commands.require_admin",
+        "presentations.telegram_admin.handlers.analytics_commands.require_admin",
         new=AsyncMock(return_value=False),
     ):
         await cmd_topics(msg, _cmd(None))
@@ -84,11 +84,11 @@ async def test_cmd_topics_renders_full_report() -> None:
     ]
     with (
         patch(
-            "bot_admin.handlers.analytics_commands.require_admin",
+            "presentations.telegram_admin.handlers.analytics_commands.require_admin",
             new=AsyncMock(return_value=True),
         ),
         patch(
-            "bot_admin.handlers.analytics_commands.topic_histogram",
+            "presentations.telegram_admin.handlers.analytics_commands.topic_histogram",
             new=AsyncMock(return_value=rows),
         ),
     ):
@@ -104,7 +104,7 @@ async def test_cmd_topics_renders_full_report() -> None:
 async def test_cmd_topics_bad_days_arg() -> None:
     msg = _mk_message()
     with patch(
-        "bot_admin.handlers.analytics_commands.require_admin",
+        "presentations.telegram_admin.handlers.analytics_commands.require_admin",
         new=AsyncMock(return_value=True),
     ):
         await cmd_topics(msg, _cmd("abc"))
@@ -122,7 +122,7 @@ def test_analytics_router_registered_before_fallback() -> None:
     """
     import inspect
 
-    from bot_admin import __main__ as adm
+    from presentations.telegram_admin import __main__ as adm
 
     source = inspect.getsource(adm.main)
     a_pos = source.find("analytics_commands.router")

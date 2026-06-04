@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from services.clients import create_or_get_client
+from core.services.clients import create_or_get_client
 
 
 def _mk_db(existing: list[dict], inserted: list[dict] | None = None) -> MagicMock:

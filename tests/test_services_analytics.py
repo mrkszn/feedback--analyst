@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from services.analytics import (
+from core.services.analytics import (
     _bucket_for,
     _coerce_categorical,
     _coerce_numeric,

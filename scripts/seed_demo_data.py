@@ -26,19 +26,19 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from db.client import get_supabase
-from integrations.openai_embed import embed_text
-from integrations.pinecone import VECTOR_DIM, upsert_client_card_vector
-from services.clients import create_or_get_client
-from services.questions import list_questions
-from services.sessions import (
+from core.integrations.openai_embed import embed_text
+from core.integrations.pinecone import VECTOR_DIM, upsert_client_card_vector
+from core.services.clients import create_or_get_client
+from core.services.questions import list_questions
+from core.services.sessions import (
     append_session_message,
     end_session,
     save_feedback_summary,
     start_session,
 )
-from tools.answers import save_answer_with_metric
-from tools.client_cards import save_client_card
+from core.storage.supabase_client import get_supabase
+from core.tools.answers import save_answer_with_metric
+from core.tools.client_cards import save_client_card
 
 logger = logging.getLogger(__name__)
 

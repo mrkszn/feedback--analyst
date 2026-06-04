@@ -7,7 +7,7 @@ import time
 import jwt as pyjwt
 import pytest
 
-from api.auth.jwt import issue_token, verify_token
+from presentations.http_api.auth.jwt import issue_token, verify_token
 
 SECRET = "test-secret-very-long-and-random-32-bytes-min"
 

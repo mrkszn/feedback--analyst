@@ -21,9 +21,9 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from agent.nodes.dialogue import DialogueTurn
-from bot_common.fsm.states import GuestFlow
-from bot_guest.handlers import dialogue as dh
+from channels.telegram.common.fsm.states import GuestFlow
+from channels.telegram.guest_bot.handlers import dialogue as dh
+from core.agent.nodes.dialogue import DialogueTurn
 
 
 @pytest.fixture

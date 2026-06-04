@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.types import InlineKeyboardMarkup, Message
 
-from bot_admin.handlers.questions import (
+from presentations.telegram_admin.handlers.questions import (
     admin_question_delete_all_apply,
     admin_question_delete_all_confirm,
     admin_question_delete_apply,
@@ -54,9 +54,12 @@ async def test_questions_list_renders_numbered_without_uuid_or_metric_key() -> N
     ]
     message = _mk_admin_message()
     with (
-        patch("bot_admin.handlers.questions.is_admin", new=AsyncMock(return_value=True)),
         patch(
-            "bot_admin.handlers.questions.list_questions",
+            "presentations.telegram_admin.handlers.questions.is_admin",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "presentations.telegram_admin.handlers.questions.list_questions",
             new=AsyncMock(return_value=rows),
         ),
     ):
@@ -100,8 +103,14 @@ async def test_questions_list_renders_numbered_without_uuid_or_metric_key() -> N
 async def test_questions_list_empty_pool() -> None:
     message = _mk_admin_message()
     with (
-        patch("bot_admin.handlers.questions.is_admin", new=AsyncMock(return_value=True)),
-        patch("bot_admin.handlers.questions.list_questions", new=AsyncMock(return_value=[])),
+        patch(
+            "presentations.telegram_admin.handlers.questions.is_admin",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "presentations.telegram_admin.handlers.questions.list_questions",
+            new=AsyncMock(return_value=[]),
+        ),
     ):
         await admin_questions_list(message)
     message.answer.assert_awaited_once()
@@ -113,7 +122,9 @@ async def test_qedit_callback_sets_state_and_prompts() -> None:
     state = MagicMock()
     state.set_state = AsyncMock()
     state.update_data = AsyncMock()
-    with patch("bot_admin.handlers.questions.is_admin", new=AsyncMock(return_value=True)):
+    with patch(
+        "presentations.telegram_admin.handlers.questions.is_admin", new=AsyncMock(return_value=True)
+    ):
         await admin_question_edit_start(cb, state)
     state.set_state.assert_awaited_once()
     state.update_data.assert_awaited_once_with(edit_qid="uuid-42")
@@ -130,7 +141,7 @@ async def test_qedit_save_updates_question() -> None:
     state.get_data = AsyncMock(return_value={"edit_qid": "uuid-42"})
     state.clear = AsyncMock()
     with patch(
-        "bot_admin.handlers.questions.update_question",
+        "presentations.telegram_admin.handlers.questions.update_question",
         new=AsyncMock(return_value={"id": "uuid-42", "text": "новый текст вопроса"}),
     ) as upd:
         await admin_question_edit_save(message, state)
@@ -141,7 +152,9 @@ async def test_qedit_save_updates_question() -> None:
 
 async def test_qdel_callback_shows_confirm_buttons() -> None:
     cb = _mk_callback("qdel:uuid-9")
-    with patch("bot_admin.handlers.questions.is_admin", new=AsyncMock(return_value=True)):
+    with patch(
+        "presentations.telegram_admin.handlers.questions.is_admin", new=AsyncMock(return_value=True)
+    ):
         await admin_question_delete_confirm(cb)
     cb.message.answer.assert_awaited_once()
     kb = cb.message.answer.await_args.kwargs["reply_markup"]
@@ -153,9 +166,12 @@ async def test_qdel_callback_shows_confirm_buttons() -> None:
 async def test_qdelyes_calls_delete_question() -> None:
     cb = _mk_callback("qdelyes:uuid-9")
     with (
-        patch("bot_admin.handlers.questions.is_admin", new=AsyncMock(return_value=True)),
         patch(
-            "bot_admin.handlers.questions.delete_question",
+            "presentations.telegram_admin.handlers.questions.is_admin",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "presentations.telegram_admin.handlers.questions.delete_question",
             new=AsyncMock(return_value=None),
         ) as dq,
     ):
@@ -175,9 +191,12 @@ async def test_qdelno_cancels() -> None:
 async def test_qdelallyes_calls_service_and_reports_count() -> None:
     cb = _mk_callback("qdelallyes")
     with (
-        patch("bot_admin.handlers.questions.is_admin", new=AsyncMock(return_value=True)),
         patch(
-            "bot_admin.handlers.questions.deactivate_all_questions",
+            "presentations.telegram_admin.handlers.questions.is_admin",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "presentations.telegram_admin.handlers.questions.deactivate_all_questions",
             new=AsyncMock(return_value=5),
         ) as svc,
     ):
@@ -191,9 +210,12 @@ async def test_qdelallyes_calls_service_and_reports_count() -> None:
 async def test_qdelallyes_empty_pool_message() -> None:
     cb = _mk_callback("qdelallyes")
     with (
-        patch("bot_admin.handlers.questions.is_admin", new=AsyncMock(return_value=True)),
         patch(
-            "bot_admin.handlers.questions.deactivate_all_questions",
+            "presentations.telegram_admin.handlers.questions.is_admin",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "presentations.telegram_admin.handlers.questions.deactivate_all_questions",
             new=AsyncMock(return_value=0),
         ),
     ):
@@ -204,7 +226,9 @@ async def test_qdelallyes_empty_pool_message() -> None:
 
 async def test_qdelall_shows_confirm() -> None:
     cb = _mk_callback("qdelall")
-    with patch("bot_admin.handlers.questions.is_admin", new=AsyncMock(return_value=True)):
+    with patch(
+        "presentations.telegram_admin.handlers.questions.is_admin", new=AsyncMock(return_value=True)
+    ):
         await admin_question_delete_all_confirm(cb)
     cb.message.answer.assert_awaited_once()
     text = cb.message.answer.await_args.args[0]

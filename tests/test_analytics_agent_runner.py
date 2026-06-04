@@ -14,8 +14,8 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
-from agent.analytics_agent.runner import answer_v2
-from agent.analytics_agent.types import AnalysisPlan, AnalyticsAnswer, ToolCall
+from core.agent.analytics_agent.runner import answer_v2
+from core.agent.analytics_agent.types import AnalysisPlan, AnalyticsAnswer, ToolCall
 
 # --------------------------------------------------------------------------- #
 # happy path — both LLMs run, the planned service runs
@@ -37,9 +37,9 @@ async def test_answer_v2_happy_chains_all_three_phases() -> None:
     service = AsyncMock(return_value=[{"topic": "ожидание", "count": 3, "avg_sentiment": -1.0}])
 
     with (
-        patch("agent.analytics_agent.interpret.chat_completion", new=interpret_chat),
-        patch("agent.analytics_agent.synthesize.chat_completion", new=synth_chat),
-        patch("agent.analytics_agent.execute.topic_histogram", new=service),
+        patch("core.agent.analytics_agent.interpret.chat_completion", new=interpret_chat),
+        patch("core.agent.analytics_agent.synthesize.chat_completion", new=synth_chat),
+        patch("core.agent.analytics_agent.execute.topic_histogram", new=service),
     ):
         answer = await answer_v2("сколько жалоб за неделю")
 
@@ -64,9 +64,9 @@ async def test_answer_v2_passes_history_into_interpret() -> None:
     ]
 
     with (
-        patch("agent.analytics_agent.interpret.chat_completion", new=interpret_chat),
-        patch("agent.analytics_agent.synthesize.chat_completion", new=synth_chat),
-        patch("agent.analytics_agent.execute.recent_sessions", new=service),
+        patch("core.agent.analytics_agent.interpret.chat_completion", new=interpret_chat),
+        patch("core.agent.analytics_agent.synthesize.chat_completion", new=synth_chat),
+        patch("core.agent.analytics_agent.execute.recent_sessions", new=service),
     ):
         await answer_v2("последний клиент", history)
 
@@ -91,10 +91,10 @@ async def test_answer_v2_clarification_skips_synthesize_llm_and_services() -> No
     service = AsyncMock()
 
     with (
-        patch("agent.analytics_agent.interpret.chat_completion", new=interpret_chat),
-        patch("agent.analytics_agent.synthesize.chat_completion", new=synth_chat),
-        patch("agent.analytics_agent.execute.full_report", new=service),
-        patch("agent.analytics_agent.execute.topic_histogram", new=service),
+        patch("core.agent.analytics_agent.interpret.chat_completion", new=interpret_chat),
+        patch("core.agent.analytics_agent.synthesize.chat_completion", new=synth_chat),
+        patch("core.agent.analytics_agent.execute.full_report", new=service),
+        patch("core.agent.analytics_agent.execute.topic_histogram", new=service),
     ):
         answer = await answer_v2("покажи")
 
@@ -110,8 +110,8 @@ async def test_answer_v2_empty_question_no_llm_at_all() -> None:
     interpret_chat = AsyncMock()
     synth_chat = AsyncMock()
     with (
-        patch("agent.analytics_agent.interpret.chat_completion", new=interpret_chat),
-        patch("agent.analytics_agent.synthesize.chat_completion", new=synth_chat),
+        patch("core.agent.analytics_agent.interpret.chat_completion", new=interpret_chat),
+        patch("core.agent.analytics_agent.synthesize.chat_completion", new=synth_chat),
     ):
         answer = await answer_v2("   ")
     assert answer.clarification_needed is True
@@ -137,9 +137,9 @@ async def test_answer_v2_empty_data_still_synthesizes() -> None:
     service = AsyncMock(return_value=empty_report)
 
     with (
-        patch("agent.analytics_agent.interpret.chat_completion", new=interpret_chat),
-        patch("agent.analytics_agent.synthesize.chat_completion", new=synth_chat),
-        patch("agent.analytics_agent.execute.full_report", new=service),
+        patch("core.agent.analytics_agent.interpret.chat_completion", new=interpret_chat),
+        patch("core.agent.analytics_agent.synthesize.chat_completion", new=synth_chat),
+        patch("core.agent.analytics_agent.execute.full_report", new=service),
     ):
         answer = await answer_v2("что у нас за неделю")
 
@@ -163,9 +163,9 @@ async def test_answer_v2_service_failure_does_not_crash_run() -> None:
     service = AsyncMock(side_effect=ValueError("db down"))
 
     with (
-        patch("agent.analytics_agent.interpret.chat_completion", new=interpret_chat),
-        patch("agent.analytics_agent.synthesize.chat_completion", new=synth_chat),
-        patch("agent.analytics_agent.execute.full_report", new=service),
+        patch("core.agent.analytics_agent.interpret.chat_completion", new=interpret_chat),
+        patch("core.agent.analytics_agent.synthesize.chat_completion", new=synth_chat),
+        patch("core.agent.analytics_agent.execute.full_report", new=service),
     ):
         answer = await answer_v2("что у нас")
 

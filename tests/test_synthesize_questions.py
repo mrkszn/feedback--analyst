@@ -1,6 +1,6 @@
 import pytest
 
-from agent.nodes.synthesize_questions import (
+from core.agent.nodes.synthesize_questions import (
     QuestionDraft,
     _QuestionDraftList,
     regenerate_single_question,
@@ -43,7 +43,7 @@ async def test_synthesize_returns_each_type(
         captured["response_model"] = kwargs.get("response_model")
         return _QuestionDraftList(drafts=[draft])
 
-    monkeypatch.setattr("agent.nodes.synthesize_questions.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.synthesize_questions.chat_completion", fake_chat)
     result = await synthesize_questions("text", count=3, restaurant_context="ctx")
     assert len(result) == 1
     assert result[0].expected_type == draft.expected_type
@@ -64,7 +64,7 @@ async def test_synthesize_enum_with_valid_values(monkeypatch: pytest.MonkeyPatch
             ]
         )
 
-    monkeypatch.setattr("agent.nodes.synthesize_questions.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.synthesize_questions.chat_completion", fake_chat)
     result = await synthesize_questions("надо спросить про соус", count=1, restaurant_context="")
     assert len(result) == 1
     assert result[0].enum_values is not None
@@ -91,7 +91,7 @@ async def test_synthesize_drops_enum_with_one_value(monkeypatch: pytest.MonkeyPa
             ]
         )
 
-    monkeypatch.setattr("agent.nodes.synthesize_questions.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.synthesize_questions.chat_completion", fake_chat)
     result = await synthesize_questions("transcript", count=2, restaurant_context="")
     assert len(result) == 1
     assert result[0].metric_key == "open"
@@ -110,7 +110,7 @@ async def test_synthesize_drops_enum_with_six_values(monkeypatch: pytest.MonkeyP
             ]
         )
 
-    monkeypatch.setattr("agent.nodes.synthesize_questions.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.synthesize_questions.chat_completion", fake_chat)
     result = await synthesize_questions("t", count=3, restaurant_context="")
     assert result == []
 
@@ -126,7 +126,7 @@ async def test_synthesize_caps_at_count(monkeypatch: pytest.MonkeyPatch) -> None
             ]
         )
 
-    monkeypatch.setattr("agent.nodes.synthesize_questions.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.synthesize_questions.chat_completion", fake_chat)
     result = await synthesize_questions("t", count=3, restaurant_context="")
     assert len(result) == 3
 
@@ -140,7 +140,7 @@ async def test_synthesize_count_n_returns_at_most_n(monkeypatch: pytest.MonkeyPa
             ]
         )
 
-    monkeypatch.setattr("agent.nodes.synthesize_questions.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.synthesize_questions.chat_completion", fake_chat)
     result = await synthesize_questions("t", count=5, restaurant_context="")
     assert len(result) <= 5
 
@@ -154,7 +154,7 @@ async def test_synthesize_filters_empty_text(monkeypatch: pytest.MonkeyPatch) ->
             ]
         )
 
-    monkeypatch.setattr("agent.nodes.synthesize_questions.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.synthesize_questions.chat_completion", fake_chat)
     result = await synthesize_questions("t", count=2, restaurant_context="")
     assert len(result) == 1
     assert result[0].metric_key == "m2"
@@ -175,7 +175,7 @@ async def test_synthesize_clears_enum_values_for_non_enum(
             ]
         )
 
-    monkeypatch.setattr("agent.nodes.synthesize_questions.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.synthesize_questions.chat_completion", fake_chat)
     result = await synthesize_questions("t", count=1, restaurant_context="")
     assert result[0].enum_values is None
 
@@ -196,7 +196,7 @@ async def test_regenerate_returns_distinct_draft(monkeypatch: pytest.MonkeyPatch
         captured["messages"] = messages
         return new_draft
 
-    monkeypatch.setattr("agent.nodes.synthesize_questions.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.synthesize_questions.chat_completion", fake_chat)
     result = await regenerate_single_question(
         transcript="t",
         current_draft=existing[0],
@@ -225,7 +225,7 @@ async def test_regenerate_passes_all_drafts_in_user_msg(
         captured["messages"] = messages
         return await fake_chat(messages, **kwargs)
 
-    monkeypatch.setattr("agent.nodes.synthesize_questions.chat_completion", capturing)
+    monkeypatch.setattr("core.agent.nodes.synthesize_questions.chat_completion", capturing)
     await regenerate_single_question(
         transcript="t",
         current_draft=existing[0],
@@ -255,7 +255,7 @@ async def test_regenerate_invalid_enum_raises(monkeypatch: pytest.MonkeyPatch) -
             enum_values=["one"],
         )
 
-    monkeypatch.setattr("agent.nodes.synthesize_questions.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.synthesize_questions.chat_completion", fake_chat)
     with pytest.raises(ValueError):
         await regenerate_single_question(
             transcript="t",

@@ -12,8 +12,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.types import Message
 
-from agent.analytics_agent.types import AnalyticsAnswer
-from bot_admin.handlers.fallback import admin_handle_freetext_fallback
+from core.agent.analytics_agent.types import AnalyticsAnswer
+from presentations.telegram_admin.handlers.fallback import admin_handle_freetext_fallback
 
 
 def _mk_message(text: str | None = "сколько отзывов за неделю?") -> MagicMock:
@@ -40,11 +40,11 @@ async def test_fallback_routes_text_to_answer_v2() -> None:
     msg = _mk_message()
     with (
         patch(
-            "bot_admin.handlers.fallback.require_admin",
+            "presentations.telegram_admin.handlers.fallback.require_admin",
             new=AsyncMock(return_value=True),
         ),
         patch(
-            "bot_admin.handlers.fallback.answer_v2",
+            "presentations.telegram_admin.handlers.fallback.answer_v2",
             new=AsyncMock(return_value=_answer("За неделю 12 отзывов.")),
         ) as m,
     ):
@@ -61,11 +61,11 @@ async def test_fallback_sends_chart_text_as_second_message() -> None:
     chart = "ужин   ████  2 (67%)\nбизнес █    1 (33%)"
     with (
         patch(
-            "bot_admin.handlers.fallback.require_admin",
+            "presentations.telegram_admin.handlers.fallback.require_admin",
             new=AsyncMock(return_value=True),
         ),
         patch(
-            "bot_admin.handlers.fallback.answer_v2",
+            "presentations.telegram_admin.handlers.fallback.answer_v2",
             new=AsyncMock(return_value=_answer("Вот распределение:", chart_text=chart)),
         ),
     ):
@@ -86,11 +86,11 @@ async def test_fallback_no_chart_sends_single_message() -> None:
     msg = _mk_message()
     with (
         patch(
-            "bot_admin.handlers.fallback.require_admin",
+            "presentations.telegram_admin.handlers.fallback.require_admin",
             new=AsyncMock(return_value=True),
         ),
         patch(
-            "bot_admin.handlers.fallback.answer_v2",
+            "presentations.telegram_admin.handlers.fallback.answer_v2",
             new=AsyncMock(return_value=_answer("Просто текст.", chart_text=None)),
         ),
     ):
@@ -102,11 +102,11 @@ async def test_fallback_empty_answer_text_uses_fallback_string() -> None:
     msg = _mk_message()
     with (
         patch(
-            "bot_admin.handlers.fallback.require_admin",
+            "presentations.telegram_admin.handlers.fallback.require_admin",
             new=AsyncMock(return_value=True),
         ),
         patch(
-            "bot_admin.handlers.fallback.answer_v2",
+            "presentations.telegram_admin.handlers.fallback.answer_v2",
             new=AsyncMock(return_value=_answer("", chart_text=None)),
         ),
     ):
@@ -122,10 +122,10 @@ async def test_fallback_non_admin_skips_agent() -> None:
     msg = _mk_message()
     with (
         patch(
-            "bot_admin.handlers.fallback.require_admin",
+            "presentations.telegram_admin.handlers.fallback.require_admin",
             new=AsyncMock(return_value=False),
         ),
-        patch("bot_admin.handlers.fallback.answer_v2", new=AsyncMock()) as m,
+        patch("presentations.telegram_admin.handlers.fallback.answer_v2", new=AsyncMock()) as m,
     ):
         await admin_handle_freetext_fallback(msg)
     m.assert_not_awaited()
@@ -136,10 +136,10 @@ async def test_fallback_empty_text_skips_agent() -> None:
     msg = _mk_message(text=None)
     with (
         patch(
-            "bot_admin.handlers.fallback.require_admin",
+            "presentations.telegram_admin.handlers.fallback.require_admin",
             new=AsyncMock(return_value=True),
         ),
-        patch("bot_admin.handlers.fallback.answer_v2", new=AsyncMock()) as m,
+        patch("presentations.telegram_admin.handlers.fallback.answer_v2", new=AsyncMock()) as m,
     ):
         await admin_handle_freetext_fallback(msg)
     m.assert_not_awaited()

@@ -47,8 +47,8 @@ os.environ.setdefault(
 
 from httpx import ASGITransport, AsyncClient
 
-from api.main import app
 from config import settings
+from presentations.http_api.main import app
 
 ADMIN_TELEGRAM_ID = 413722495  # Mark, from admin_users table
 NON_ADMIN_TELEGRAM_ID = 999_999_999

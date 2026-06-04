@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 from aiogram.types import InlineKeyboardMarkup
 
-from bot_guest.keyboards import build_question_keyboard
+from channels.telegram.guest_bot.keyboards import build_question_keyboard
 
 
 def _q(
@@ -120,7 +120,7 @@ def test_text_returns_none() -> None:
 def test_enum_empty_returns_none_and_logs_warning(
     empty: list[str] | None, caplog: pytest.LogCaptureFixture
 ) -> None:
-    caplog.set_level(logging.WARNING, logger="bot_guest.keyboards")
+    caplog.set_level(logging.WARNING, logger="channels.telegram.guest_bot.keyboards")
     result = build_question_keyboard(_q("enum", metric_key="topic_choice", enum_values=empty))
     assert result is None
     assert any(

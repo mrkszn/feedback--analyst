@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from services.sessions import (
+from core.services.sessions import (
     append_session_message,
     end_session,
     save_feedback_summary,

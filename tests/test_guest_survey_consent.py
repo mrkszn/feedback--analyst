@@ -19,9 +19,9 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from agent.nodes.select import SelectedQuestions
-from bot_common.fsm.states import GuestFlow
-from bot_guest.handlers import survey_consent as sc
+from channels.telegram.common.fsm.states import GuestFlow
+from channels.telegram.guest_bot.handlers import survey_consent as sc
+from core.agent.nodes.select import SelectedQuestions
 
 
 @pytest.fixture

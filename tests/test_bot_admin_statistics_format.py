@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import cast
 
-from bot_admin.handlers.statistics import _TG_LIMIT, format_report
-from services.statistics import FullReport
+from core.services.statistics import FullReport
+from presentations.telegram_admin.handlers.statistics import _TG_LIMIT, format_report
 
 
 def _report() -> FullReport:

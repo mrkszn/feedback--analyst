@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.types import ReplyKeyboardMarkup
 
-from bot_admin.handlers.auth import admin_menu_admins, admin_start
-from bot_admin.keyboards import (
+from presentations.telegram_admin.handlers.auth import admin_menu_admins, admin_start
+from presentations.telegram_admin.keyboards import (
     BTN_ADD_QUESTION,
     BTN_ADMINS,
     BTN_QUESTIONS,
@@ -30,7 +30,9 @@ async def test_admin_start_attaches_keyboard_for_admin() -> None:
     message.from_user = MagicMock(id=1)
     message.answer = AsyncMock()
 
-    with patch("bot_admin.handlers.auth.is_admin", new=AsyncMock(return_value=True)):
+    with patch(
+        "presentations.telegram_admin.handlers.auth.is_admin", new=AsyncMock(return_value=True)
+    ):
         await admin_start(message)
 
     message.answer.assert_awaited_once()
@@ -44,7 +46,9 @@ async def test_admin_start_no_keyboard_for_non_admin() -> None:
     message.from_user = MagicMock(id=2)
     message.answer = AsyncMock()
 
-    with patch("bot_admin.handlers.auth.is_admin", new=AsyncMock(return_value=False)):
+    with patch(
+        "presentations.telegram_admin.handlers.auth.is_admin", new=AsyncMock(return_value=False)
+    ):
         await admin_start(message)
 
     args, kwargs = message.answer.await_args
@@ -61,16 +65,19 @@ async def test_button_admins_returns_invite_hint() -> None:
 
 
 async def test_button_questions_forwards_to_list() -> None:
-    from bot_admin.handlers.questions import admin_questions_list_button
+    from presentations.telegram_admin.handlers.questions import admin_questions_list_button
 
     message = MagicMock()
     message.from_user = MagicMock(id=3)
     message.answer = AsyncMock()
 
     with (
-        patch("bot_admin.handlers.questions.is_admin", new=AsyncMock(return_value=True)),
         patch(
-            "bot_admin.handlers.questions.list_questions",
+            "presentations.telegram_admin.handlers.questions.is_admin",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "presentations.telegram_admin.handlers.questions.list_questions",
             new=AsyncMock(return_value=[]),
         ),
     ):
@@ -80,14 +87,16 @@ async def test_button_questions_forwards_to_list() -> None:
 
 
 async def test_button_add_question_forwards_to_picker() -> None:
-    from bot_admin.handlers.questions import admin_question_add_button
+    from presentations.telegram_admin.handlers.questions import admin_question_add_button
 
     message = MagicMock()
     message.from_user = MagicMock(id=4)
     message.answer = AsyncMock()
     state = MagicMock()
 
-    with patch("bot_admin.handlers.questions.is_admin", new=AsyncMock(return_value=True)):
+    with patch(
+        "presentations.telegram_admin.handlers.questions.is_admin", new=AsyncMock(return_value=True)
+    ):
         await admin_question_add_button(message, state)
 
     message.answer.assert_awaited_once()

@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from integrations.pinecone import upsert_client_card_vector
+from core.integrations.pinecone import upsert_client_card_vector
 
 
 def _make_pinecone_mock() -> tuple[MagicMock, MagicMock]:
@@ -26,7 +26,7 @@ def _make_pinecone_mock() -> tuple[MagicMock, MagicMock]:
 
 async def test_upsert_returns_session_id(monkeypatch: pytest.MonkeyPatch) -> None:
     pc_class, _upsert = _make_pinecone_mock()
-    monkeypatch.setattr("integrations.pinecone.Pinecone", pc_class)
+    monkeypatch.setattr("core.integrations.pinecone.Pinecone", pc_class)
 
     result = await upsert_client_card_vector(
         session_id="sess-1",
@@ -41,7 +41,7 @@ async def test_upsert_returns_session_id(monkeypatch: pytest.MonkeyPatch) -> Non
 
 async def test_invalid_vector_length_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     pc_class, upsert = _make_pinecone_mock()
-    monkeypatch.setattr("integrations.pinecone.Pinecone", pc_class)
+    monkeypatch.setattr("core.integrations.pinecone.Pinecone", pc_class)
 
     with pytest.raises(ValueError):
         await upsert_client_card_vector(
@@ -57,7 +57,7 @@ async def test_invalid_vector_length_raises(monkeypatch: pytest.MonkeyPatch) -> 
 
 async def test_metadata_includes_required_fields(monkeypatch: pytest.MonkeyPatch) -> None:
     pc_class, upsert = _make_pinecone_mock()
-    monkeypatch.setattr("integrations.pinecone.Pinecone", pc_class)
+    monkeypatch.setattr("core.integrations.pinecone.Pinecone", pc_class)
     fixed_date = datetime(2026, 5, 25, 12, 0, 0, tzinfo=UTC)
 
     await upsert_client_card_vector(
@@ -84,7 +84,7 @@ async def test_metadata_includes_required_fields(monkeypatch: pytest.MonkeyPatch
 
 async def test_empty_topics_omitted(monkeypatch: pytest.MonkeyPatch) -> None:
     pc_class, upsert = _make_pinecone_mock()
-    monkeypatch.setattr("integrations.pinecone.Pinecone", pc_class)
+    monkeypatch.setattr("core.integrations.pinecone.Pinecone", pc_class)
 
     await upsert_client_card_vector(
         session_id="sess-empty",
@@ -101,7 +101,7 @@ async def test_empty_topics_omitted(monkeypatch: pytest.MonkeyPatch) -> None:
 
 async def test_default_namespace_from_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     pc_class, upsert = _make_pinecone_mock()
-    monkeypatch.setattr("integrations.pinecone.Pinecone", pc_class)
+    monkeypatch.setattr("core.integrations.pinecone.Pinecone", pc_class)
 
     from config import settings
 
@@ -123,7 +123,7 @@ async def test_default_namespace_from_settings(monkeypatch: pytest.MonkeyPatch) 
 
 async def test_overrides_take_precedence(monkeypatch: pytest.MonkeyPatch) -> None:
     pc_class, upsert = _make_pinecone_mock()
-    monkeypatch.setattr("integrations.pinecone.Pinecone", pc_class)
+    monkeypatch.setattr("core.integrations.pinecone.Pinecone", pc_class)
 
     await upsert_client_card_vector(
         session_id="sess-ov",
@@ -141,7 +141,7 @@ async def test_overrides_take_precedence(monkeypatch: pytest.MonkeyPatch) -> Non
 
 async def test_default_date_uses_now_utc(monkeypatch: pytest.MonkeyPatch) -> None:
     pc_class, upsert = _make_pinecone_mock()
-    monkeypatch.setattr("integrations.pinecone.Pinecone", pc_class)
+    monkeypatch.setattr("core.integrations.pinecone.Pinecone", pc_class)
 
     before = datetime.now(UTC)
     await upsert_client_card_vector(

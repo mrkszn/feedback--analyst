@@ -1,10 +1,10 @@
 import pytest
 
-from agent.nodes.analyze import FeedbackSummary, analyze_feedback
-from agent.nodes.card import ClientCard, build_client_card
-from agent.nodes.extract import extract_metric_from_answer
-from agent.nodes.select import SelectedQuestions, select_adaptive_questions
-from agent.prompts import (
+from core.agent.nodes.analyze import FeedbackSummary, analyze_feedback
+from core.agent.nodes.card import ClientCard, build_client_card
+from core.agent.nodes.extract import extract_metric_from_answer
+from core.agent.nodes.select import SelectedQuestions, select_adaptive_questions
+from core.agent.prompts import (
     build_analyze_prompt,
     build_card_prompt,
     build_extract_prompt,
@@ -56,7 +56,7 @@ async def test_analyze_feedback_returns_summary(monkeypatch: pytest.MonkeyPatch)
         assert kwargs.get("response_model") is FeedbackSummary
         return expected
 
-    monkeypatch.setattr("agent.nodes.analyze.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.analyze.chat_completion", fake_chat)
     result = await analyze_feedback("ужин был отличный")
     assert result == expected
 
@@ -86,7 +86,7 @@ async def test_select_filters_unknown_ids(monkeypatch: pytest.MonkeyPatch) -> No
     async def fake_chat(messages, **kwargs):
         return SelectedQuestions(question_ids=["1", "999", "2"], reasoning="r")
 
-    monkeypatch.setattr("agent.nodes.select.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.select.chat_completion", fake_chat)
     result = await select_adaptive_questions(summary, pool, min_questions=2, max_questions=5)
     assert result.question_ids == ["1", "2", "3"][:3] or set(result.question_ids) >= {"1", "2"}
     assert "999" not in result.question_ids
@@ -103,7 +103,7 @@ async def test_select_pads_below_min(monkeypatch: pytest.MonkeyPatch) -> None:
     async def fake_chat(messages, **kwargs):
         return SelectedQuestions(question_ids=["1"], reasoning="r")
 
-    monkeypatch.setattr("agent.nodes.select.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.select.chat_completion", fake_chat)
     result = await select_adaptive_questions(summary, pool, min_questions=3, max_questions=5)
     assert len(result.question_ids) == 3
     assert "1" in result.question_ids
@@ -116,7 +116,7 @@ async def test_select_truncates_above_max(monkeypatch: pytest.MonkeyPatch) -> No
     async def fake_chat(messages, **kwargs):
         return SelectedQuestions(question_ids=[str(i) for i in range(10)], reasoning="r")
 
-    monkeypatch.setattr("agent.nodes.select.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.select.chat_completion", fake_chat)
     result = await select_adaptive_questions(summary, pool, min_questions=3, max_questions=5)
     assert len(result.question_ids) == 5
 
@@ -125,34 +125,34 @@ async def test_select_truncates_above_max(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 async def test_extract_text(monkeypatch: pytest.MonkeyPatch) -> None:
-    from agent.nodes.extract import _TextValue
+    from core.agent.nodes.extract import _TextValue
 
     async def fake_chat(messages, **kwargs):
         return _TextValue(value="хорошо")
 
-    monkeypatch.setattr("agent.nodes.extract.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.extract.chat_completion", fake_chat)
     q = {"text": "Q?", "expected_type": "text"}
     assert await extract_metric_from_answer(question=q, answer_text="да") == "хорошо"
 
 
 async def test_extract_number(monkeypatch: pytest.MonkeyPatch) -> None:
-    from agent.nodes.extract import _NumberValue
+    from core.agent.nodes.extract import _NumberValue
 
     async def fake_chat(messages, **kwargs):
         return _NumberValue(value=4.0)
 
-    monkeypatch.setattr("agent.nodes.extract.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.extract.chat_completion", fake_chat)
     q = {"text": "Q?", "expected_type": "number"}
     assert await extract_metric_from_answer(question=q, answer_text="четыре") == 4.0
 
 
 async def test_extract_enum_in_values(monkeypatch: pytest.MonkeyPatch) -> None:
-    from agent.nodes.extract import _EnumValue
+    from core.agent.nodes.extract import _EnumValue
 
     async def fake_chat(messages, **kwargs):
         return _EnumValue(value="medium")
 
-    monkeypatch.setattr("agent.nodes.extract.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.extract.chat_completion", fake_chat)
     q = {"text": "Q?", "expected_type": "enum", "enum_values": ["low", "medium", "high"]}
     assert await extract_metric_from_answer(question=q, answer_text="средне") == "medium"
 
@@ -160,12 +160,12 @@ async def test_extract_enum_in_values(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_extract_enum_out_of_values_returns_none(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from agent.nodes.extract import _EnumValue
+    from core.agent.nodes.extract import _EnumValue
 
     async def fake_chat(messages, **kwargs):
         return _EnumValue(value="extreme")
 
-    monkeypatch.setattr("agent.nodes.extract.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.extract.chat_completion", fake_chat)
     q = {"text": "Q?", "expected_type": "enum", "enum_values": ["low", "high"]}
     assert await extract_metric_from_answer(question=q, answer_text="x") is None
 
@@ -195,7 +195,7 @@ async def test_build_card_returns_summary(monkeypatch: pytest.MonkeyPatch) -> No
     async def fake_chat(messages, **kwargs):
         return expected
 
-    monkeypatch.setattr("agent.nodes.card.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.card.chat_completion", fake_chat)
     summary = FeedbackSummary(summary="x", sentiment="positive", topics=["food"], emotion="joy")
     result = await build_client_card(feedback_summary=summary, answers=[])
     assert result.summary_text.startswith("Клиент")
@@ -205,7 +205,7 @@ async def test_build_card_too_short_raises(monkeypatch: pytest.MonkeyPatch) -> N
     async def fake_chat(messages, **kwargs):
         return ClientCard(summary_text="ok", sentiment="", topics=[])
 
-    monkeypatch.setattr("agent.nodes.card.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.card.chat_completion", fake_chat)
     summary = FeedbackSummary(summary="x", sentiment="neutral", topics=[], emotion="")
     with pytest.raises(ValueError):
         await build_client_card(feedback_summary=summary, answers=[])
@@ -221,7 +221,7 @@ async def test_build_card_passes_through_sentiment_topics(
             topics=[],
         )
 
-    monkeypatch.setattr("agent.nodes.card.chat_completion", fake_chat)
+    monkeypatch.setattr("core.agent.nodes.card.chat_completion", fake_chat)
     summary = FeedbackSummary(
         summary="x", sentiment="positive", topics=["food", "service"], emotion="joy"
     )

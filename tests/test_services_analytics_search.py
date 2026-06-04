@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from services.analytics import client_profile, semantic_search
+from core.services.analytics import client_profile, semantic_search
 
 # --------------------------------------------------------------------------- #
 # semantic_search
@@ -66,11 +66,11 @@ async def test_semantic_search_joins_sessions_and_cards() -> None:
 
     with (
         patch(
-            "services.analytics.embed_text",
+            "core.services.analytics.embed_text",
             new=AsyncMock(return_value=[0.1] * 1536),
         ),
         patch(
-            "services.analytics.query_similar_sessions",
+            "core.services.analytics.query_similar_sessions",
             new=AsyncMock(return_value=matches),
         ),
     ):
@@ -92,11 +92,11 @@ async def test_semantic_search_empty_query_raises() -> None:
 async def test_semantic_search_no_matches_returns_empty() -> None:
     with (
         patch(
-            "services.analytics.embed_text",
+            "core.services.analytics.embed_text",
             new=AsyncMock(return_value=[0.0] * 1536),
         ),
         patch(
-            "services.analytics.query_similar_sessions",
+            "core.services.analytics.query_similar_sessions",
             new=AsyncMock(return_value=[]),
         ),
     ):

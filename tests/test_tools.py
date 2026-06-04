@@ -3,9 +3,9 @@ from uuid import uuid4
 
 import pytest
 
-from tools.answers import save_answer_with_metric
-from tools.client_cards import save_client_card
-from tools.questions import get_active_questions
+from core.tools.answers import save_answer_with_metric
+from core.tools.client_cards import save_client_card
+from core.tools.questions import get_active_questions
 
 # --- get_active_questions ---
 
@@ -26,7 +26,7 @@ async def test_get_active_strips_internal_fields(monkeypatch: pytest.MonkeyPatch
             }
         ]
 
-    monkeypatch.setattr("tools.questions.list_questions", fake_list_questions)
+    monkeypatch.setattr("core.tools.questions.list_questions", fake_list_questions)
     result = await get_active_questions(db=MagicMock())
     assert set(result[0].keys()) == {"id", "text", "metric_key", "expected_type", "enum_values"}
     assert isinstance(result[0]["id"], str)
@@ -34,7 +34,7 @@ async def test_get_active_strips_internal_fields(monkeypatch: pytest.MonkeyPatch
 
 async def test_get_active_empty_pool(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "tools.questions.list_questions",
+        "core.tools.questions.list_questions",
         AsyncMock(return_value=[]),
     )
     assert await get_active_questions(db=MagicMock()) == []

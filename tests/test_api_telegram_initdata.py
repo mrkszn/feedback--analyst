@@ -10,7 +10,7 @@ from urllib.parse import urlencode
 
 import pytest
 
-from api.auth.telegram_webapp import TelegramUser, validate_initdata
+from presentations.http_api.auth.telegram_webapp import TelegramUser, validate_initdata
 
 BOT_TOKEN = "1234567890:ABCDEF-fake-token-for-test"
 

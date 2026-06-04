@@ -4,16 +4,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agent.nodes.admin_assistant import draft_question_from_nl
-from agent.nodes.synthesize_questions import QuestionDraft
-from bot_admin.handlers.admin_question_dialog import (
+from channels.telegram.common.fsm.states import AdminFlow
+from core.agent.nodes.admin_assistant import draft_question_from_nl
+from core.agent.nodes.synthesize_questions import QuestionDraft
+from presentations.telegram_admin.handlers.admin_question_dialog import (
     admin_question_dialog_cancel,
     admin_question_dialog_confirm,
     admin_question_dialog_describe,
     admin_question_dialog_retry,
     admin_question_dialog_start,
 )
-from bot_common.fsm.states import AdminFlow
 
 
 def _mk_message(text: str | None = None) -> MagicMock:
@@ -65,7 +65,7 @@ async def test_draft_question_from_nl_returns_draft() -> None:
         expected_type="boolean",
     )
     with patch(
-        "agent.nodes.admin_assistant.chat_completion",
+        "core.agent.nodes.admin_assistant.chat_completion",
         new=AsyncMock(return_value=fake),
     ):
         out = await draft_question_from_nl("спрашивай нравится ли еда")
@@ -82,7 +82,7 @@ async def test_draft_question_from_nl_invalid_enum_raises() -> None:
         enum_values=["один"],
     )
     with patch(
-        "agent.nodes.admin_assistant.chat_completion",
+        "core.agent.nodes.admin_assistant.chat_completion",
         new=AsyncMock(return_value=bad),
     ):
         with pytest.raises(ValueError, match="invalid"):
@@ -97,7 +97,7 @@ async def test_dialog_start_sets_state_and_prompts() -> None:
     cb = _mk_callback("addq:dialog")
     state = _mk_state()
     with patch(
-        "bot_admin.handlers.admin_question_dialog.is_admin",
+        "presentations.telegram_admin.handlers.admin_question_dialog.is_admin",
         new=AsyncMock(return_value=True),
     ):
         await admin_question_dialog_start(cb, state)
@@ -114,7 +114,7 @@ async def test_dialog_describe_drafts_and_moves_to_confirmation() -> None:
         expected_type="boolean",
     )
     with patch(
-        "bot_admin.handlers.admin_question_dialog.draft_question_from_nl",
+        "presentations.telegram_admin.handlers.admin_question_dialog.draft_question_from_nl",
         new=AsyncMock(return_value=fake),
     ):
         await admin_question_dialog_describe(msg, state)
@@ -135,7 +135,7 @@ async def test_dialog_describe_llm_error_keeps_state() -> None:
     msg = _mk_message("что-то непонятное")
     state = _mk_state()
     with patch(
-        "bot_admin.handlers.admin_question_dialog.draft_question_from_nl",
+        "presentations.telegram_admin.handlers.admin_question_dialog.draft_question_from_nl",
         new=AsyncMock(side_effect=ValueError("invalid")),
     ):
         await admin_question_dialog_describe(msg, state)
@@ -164,11 +164,11 @@ async def test_dialog_confirm_creates_question() -> None:
     )
     with (
         patch(
-            "bot_admin.handlers.admin_question_dialog.is_admin",
+            "presentations.telegram_admin.handlers.admin_question_dialog.is_admin",
             new=AsyncMock(return_value=True),
         ),
         patch(
-            "bot_admin.handlers.admin_question_dialog.create_question",
+            "presentations.telegram_admin.handlers.admin_question_dialog.create_question",
             new=AsyncMock(return_value={"id": "abc", "text": "Понравилась ли еда?"}),
         ) as cq,
     ):
@@ -183,7 +183,7 @@ async def test_dialog_confirm_lost_draft() -> None:
     cb = _mk_callback("nldraft:yes")
     state = _mk_state()
     with patch(
-        "bot_admin.handlers.admin_question_dialog.is_admin",
+        "presentations.telegram_admin.handlers.admin_question_dialog.is_admin",
         new=AsyncMock(return_value=True),
     ):
         await admin_question_dialog_confirm(cb, state)
@@ -195,7 +195,7 @@ async def test_dialog_retry_reenters_description() -> None:
     cb = _mk_callback("nldraft:edit")
     state = _mk_state(initial={"nl_draft": {"text": "x"}})
     with patch(
-        "bot_admin.handlers.admin_question_dialog.is_admin",
+        "presentations.telegram_admin.handlers.admin_question_dialog.is_admin",
         new=AsyncMock(return_value=True),
     ):
         await admin_question_dialog_retry(cb, state)

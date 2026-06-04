@@ -68,6 +68,6 @@ ssh root@178.105.54.29 'chown root:waiter /etc/telegram-waiter/.env && chmod 064
 
 ## ⚠️ Dev creds = single-polling-consumer rule
 
-We're running dev Telegram bot tokens in prod. **One token = one polling consumer.** When the VPS bots are up, local `uv run python -m bot_guest/admin` will silently lose updates (Telegram routes each update to whichever consumer fetched it first). Stop local bots before working on the same tokens.
+We're running dev Telegram bot tokens in prod. **One token = one polling consumer.** When the VPS bots are up, local `uv run python -m channels.telegram.guest_bot` / `python -m presentations.telegram_admin` will silently lose updates (Telegram routes each update to whichever consumer fetched it first). Stop local bots before working on the same tokens.
 
 When ready to split: create new `@<restaurant>_bot` tokens at @BotFather, push to `/etc/telegram-waiter/.env` on VPS only, keep dev tokens local.

@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from pytest_mock import MockerFixture
 
 from config import settings
-from integrations import openai_chat
+from core.integrations import openai_chat
 
 
 class _Sentiment(BaseModel):
@@ -83,7 +83,7 @@ async def test_retry_on_rate_limit(mocker: MockerFixture) -> None:
     llm.ainvoke = AsyncMock(side_effect=[err, err, AIMessage(content="ok")])
     mocker.patch.object(openai_chat, "get_chat_model", return_value=llm)
     # Убираем реальные паузы exponential backoff.
-    mocker.patch("integrations.openai_chat.wait_exponential", return_value=lambda _rs: 0)
+    mocker.patch("core.integrations.openai_chat.wait_exponential", return_value=lambda _rs: 0)
 
     result = await openai_chat.chat_completion([{"role": "user", "content": "hi"}])
 
@@ -96,7 +96,7 @@ async def test_retry_exhausted_propagates(mocker: MockerFixture) -> None:
     llm = MagicMock()
     llm.ainvoke = AsyncMock(side_effect=[err, err, err])
     mocker.patch.object(openai_chat, "get_chat_model", return_value=llm)
-    mocker.patch("integrations.openai_chat.wait_exponential", return_value=lambda _rs: 0)
+    mocker.patch("core.integrations.openai_chat.wait_exponential", return_value=lambda _rs: 0)
 
     with pytest.raises(RateLimitError):
         await openai_chat.chat_completion([{"role": "user", "content": "hi"}])

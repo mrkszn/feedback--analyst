@@ -19,8 +19,8 @@ from datetime import datetime
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
-from agent.analytics_agent.execute import execute_plan
-from agent.analytics_agent.types import AnalysisPlan, DataBlock, ToolCall
+from core.agent.analytics_agent.execute import execute_plan
+from core.agent.analytics_agent.types import AnalysisPlan, DataBlock, ToolCall
 
 
 def _plan(*calls: ToolCall, interpretation: str = "тест") -> AnalysisPlan:
@@ -46,7 +46,7 @@ async def test_execute_clarification_calls_no_services() -> None:
         clarification_question="что показать?",
         tool_calls=[ToolCall(name="full_report", args={"period_days": 7})],
     )
-    with patch("agent.analytics_agent.execute.full_report", new=AsyncMock()) as mock_fr:
+    with patch("core.agent.analytics_agent.execute.full_report", new=AsyncMock()) as mock_fr:
         execution = await execute_plan(plan)
     mock_fr.assert_not_called()
     assert execution["clarification_needed"] is True
@@ -62,7 +62,7 @@ async def test_execute_clarification_calls_no_services() -> None:
 async def test_execute_full_report_period_days_window() -> None:
     plan = _plan(ToolCall(name="full_report", args={"period_days": 7}))
     mock_fr = AsyncMock(return_value={"activity": {"sessions_started": 3}})
-    with patch("agent.analytics_agent.execute.full_report", new=mock_fr):
+    with patch("core.agent.analytics_agent.execute.full_report", new=mock_fr):
         execution = await execute_plan(plan)
 
     block = _only_block(execution)
@@ -80,7 +80,7 @@ async def test_execute_full_report_period_days_window() -> None:
 async def test_execute_full_report_all_time_passes_none_date_from() -> None:
     plan = _plan(ToolCall(name="full_report", args={"all_time": True}))
     mock_fr = AsyncMock(return_value={})
-    with patch("agent.analytics_agent.execute.full_report", new=mock_fr):
+    with patch("core.agent.analytics_agent.execute.full_report", new=mock_fr):
         await execute_plan(plan)
 
     args, kwargs = mock_fr.call_args
@@ -92,7 +92,7 @@ async def test_execute_full_report_all_time_passes_none_date_from() -> None:
 async def test_execute_full_report_default_period_when_unspecified() -> None:
     plan = _plan(ToolCall(name="full_report", args={}))
     mock_fr = AsyncMock(return_value={})
-    with patch("agent.analytics_agent.execute.full_report", new=mock_fr):
+    with patch("core.agent.analytics_agent.execute.full_report", new=mock_fr):
         await execute_plan(plan)
     args, _ = mock_fr.call_args
     assert args[0] is not None  # default 7-day window, not all-time
@@ -105,7 +105,7 @@ async def test_execute_full_report_default_period_when_unspecified() -> None:
 async def test_execute_topic_histogram_all_time_wide_window_not_none() -> None:
     plan = _plan(ToolCall(name="topic_histogram", args={"all_time": True}))
     mock_th = AsyncMock(return_value=[])
-    with patch("agent.analytics_agent.execute.topic_histogram", new=mock_th):
+    with patch("core.agent.analytics_agent.execute.topic_histogram", new=mock_th):
         await execute_plan(plan)
     args, kwargs = mock_th.call_args
     date_from, date_to = args[0], args[1]
@@ -120,7 +120,7 @@ async def test_execute_topic_histogram_forwards_sentiment() -> None:
         ToolCall(name="topic_histogram", args={"period_days": 30, "sentiment": "negative"})
     )
     mock_th = AsyncMock(return_value=[{"topic": "ожидание", "count": 4, "avg_sentiment": -1.0}])
-    with patch("agent.analytics_agent.execute.topic_histogram", new=mock_th):
+    with patch("core.agent.analytics_agent.execute.topic_histogram", new=mock_th):
         execution = await execute_plan(plan)
     block = _only_block(execution)
     assert block.ok is True
@@ -131,7 +131,7 @@ async def test_execute_topic_histogram_forwards_sentiment() -> None:
 async def test_execute_topic_histogram_bad_sentiment_marks_error() -> None:
     plan = _plan(ToolCall(name="topic_histogram", args={"sentiment": "furious"}))
     mock_th = AsyncMock()
-    with patch("agent.analytics_agent.execute.topic_histogram", new=mock_th):
+    with patch("core.agent.analytics_agent.execute.topic_histogram", new=mock_th):
         execution = await execute_plan(plan)
     block = _only_block(execution)
     assert block.ok is False
@@ -146,7 +146,7 @@ async def test_execute_topic_histogram_bad_sentiment_marks_error() -> None:
 async def test_execute_aggregate_metric_happy() -> None:
     plan = _plan(ToolCall(name="aggregate_metric", args={"metric_key": "speed", "period_days": 7}))
     mock_am = AsyncMock(return_value=[{"bucket": "2026-05-01", "count": 2, "avg": 4.0}])
-    with patch("agent.analytics_agent.execute.aggregate_metric", new=mock_am):
+    with patch("core.agent.analytics_agent.execute.aggregate_metric", new=mock_am):
         execution = await execute_plan(plan)
     block = _only_block(execution)
     assert block.ok is True
@@ -158,7 +158,7 @@ async def test_execute_aggregate_metric_happy() -> None:
 async def test_execute_aggregate_metric_missing_key_errors_without_call() -> None:
     plan = _plan(ToolCall(name="aggregate_metric", args={"period_days": 7}))
     mock_am = AsyncMock()
-    with patch("agent.analytics_agent.execute.aggregate_metric", new=mock_am):
+    with patch("core.agent.analytics_agent.execute.aggregate_metric", new=mock_am):
         execution = await execute_plan(plan)
     block = _only_block(execution)
     assert block.ok is False
@@ -171,7 +171,7 @@ async def test_execute_aggregate_metric_bad_group_by_errors_without_call() -> No
         ToolCall(name="aggregate_metric", args={"metric_key": "speed", "group_by": "month"})
     )
     mock_am = AsyncMock()
-    with patch("agent.analytics_agent.execute.aggregate_metric", new=mock_am):
+    with patch("core.agent.analytics_agent.execute.aggregate_metric", new=mock_am):
         execution = await execute_plan(plan)
     block = _only_block(execution)
     assert block.ok is False
@@ -186,7 +186,7 @@ async def test_execute_aggregate_metric_bad_group_by_errors_without_call() -> No
 async def test_execute_categorical_distribution_happy() -> None:
     plan = _plan(ToolCall(name="categorical_distribution", args={"metric_key": "age_group"}))
     mock_cd = AsyncMock(return_value={"metric_key": "age_group", "total": 5})
-    with patch("agent.analytics_agent.execute.categorical_distribution", new=mock_cd):
+    with patch("core.agent.analytics_agent.execute.categorical_distribution", new=mock_cd):
         execution = await execute_plan(plan)
     assert _only_block(execution).ok is True
     args, _ = mock_cd.call_args
@@ -196,7 +196,7 @@ async def test_execute_categorical_distribution_happy() -> None:
 async def test_execute_categorical_distribution_missing_key_errors() -> None:
     plan = _plan(ToolCall(name="categorical_distribution", args={}))
     mock_cd = AsyncMock()
-    with patch("agent.analytics_agent.execute.categorical_distribution", new=mock_cd):
+    with patch("core.agent.analytics_agent.execute.categorical_distribution", new=mock_cd):
         execution = await execute_plan(plan)
     block = _only_block(execution)
     assert block.ok is False
@@ -211,7 +211,7 @@ async def test_execute_categorical_distribution_missing_key_errors() -> None:
 async def test_execute_semantic_search_happy_query_text() -> None:
     plan = _plan(ToolCall(name="semantic_search", args={"query_text": "ожидание", "top_k": 5}))
     mock_ss = AsyncMock(return_value=[{"session_id": "s1", "score": 0.9}])
-    with patch("agent.analytics_agent.execute.semantic_search", new=mock_ss):
+    with patch("core.agent.analytics_agent.execute.semantic_search", new=mock_ss):
         execution = await execute_plan(plan)
     assert _only_block(execution).ok is True
     args, kwargs = mock_ss.call_args
@@ -222,7 +222,7 @@ async def test_execute_semantic_search_happy_query_text() -> None:
 async def test_execute_semantic_search_accepts_query_alias() -> None:
     plan = _plan(ToolCall(name="semantic_search", args={"query": "сервис"}))
     mock_ss = AsyncMock(return_value=[])
-    with patch("agent.analytics_agent.execute.semantic_search", new=mock_ss):
+    with patch("core.agent.analytics_agent.execute.semantic_search", new=mock_ss):
         execution = await execute_plan(plan)
     assert _only_block(execution).ok is True
     assert mock_ss.call_args.args[0] == "сервис"
@@ -231,7 +231,7 @@ async def test_execute_semantic_search_accepts_query_alias() -> None:
 async def test_execute_semantic_search_empty_query_errors_without_call() -> None:
     plan = _plan(ToolCall(name="semantic_search", args={"query_text": "  "}))
     mock_ss = AsyncMock()
-    with patch("agent.analytics_agent.execute.semantic_search", new=mock_ss):
+    with patch("core.agent.analytics_agent.execute.semantic_search", new=mock_ss):
         execution = await execute_plan(plan)
     block = _only_block(execution)
     assert block.ok is False
@@ -246,7 +246,7 @@ async def test_execute_semantic_search_empty_query_errors_without_call() -> None
 async def test_execute_client_profile_happy_int_id() -> None:
     plan = _plan(ToolCall(name="client_profile", args={"telegram_id": 42}))
     mock_cp = AsyncMock(return_value={"telegram_id": 42, "name": "Анна"})
-    with patch("agent.analytics_agent.execute.client_profile", new=mock_cp):
+    with patch("core.agent.analytics_agent.execute.client_profile", new=mock_cp):
         execution = await execute_plan(plan)
     assert _only_block(execution).ok is True
     assert mock_cp.call_args.args[0] == 42
@@ -255,7 +255,7 @@ async def test_execute_client_profile_happy_int_id() -> None:
 async def test_execute_client_profile_missing_id_errors_without_call() -> None:
     plan = _plan(ToolCall(name="client_profile", args={}))
     mock_cp = AsyncMock()
-    with patch("agent.analytics_agent.execute.client_profile", new=mock_cp):
+    with patch("core.agent.analytics_agent.execute.client_profile", new=mock_cp):
         execution = await execute_plan(plan)
     block = _only_block(execution)
     assert block.ok is False
@@ -266,7 +266,7 @@ async def test_execute_client_profile_missing_id_errors_without_call() -> None:
 async def test_execute_client_profile_non_int_id_errors_without_call() -> None:
     plan = _plan(ToolCall(name="client_profile", args={"telegram_id": "не-число"}))
     mock_cp = AsyncMock()
-    with patch("agent.analytics_agent.execute.client_profile", new=mock_cp):
+    with patch("core.agent.analytics_agent.execute.client_profile", new=mock_cp):
         execution = await execute_plan(plan)
     block = _only_block(execution)
     assert block.ok is False
@@ -277,7 +277,7 @@ async def test_execute_client_profile_non_int_id_errors_without_call() -> None:
 async def test_execute_client_profile_lookup_error_marks_not_found() -> None:
     plan = _plan(ToolCall(name="client_profile", args={"telegram_id": 7}))
     mock_cp = AsyncMock(side_effect=LookupError("client 7 not found"))
-    with patch("agent.analytics_agent.execute.client_profile", new=mock_cp):
+    with patch("core.agent.analytics_agent.execute.client_profile", new=mock_cp):
         execution = await execute_plan(plan)
     block = _only_block(execution)
     assert block.ok is False
@@ -291,7 +291,7 @@ async def test_execute_client_profile_lookup_error_marks_not_found() -> None:
 async def test_execute_recent_sessions_forwards_args() -> None:
     plan = _plan(ToolCall(name="recent_sessions", args={"limit": 1, "sentiment": "negative"}))
     mock_rs = AsyncMock(return_value=[{"client_id": 3, "summary": "x"}])
-    with patch("agent.analytics_agent.execute.recent_sessions", new=mock_rs):
+    with patch("core.agent.analytics_agent.execute.recent_sessions", new=mock_rs):
         execution = await execute_plan(plan)
     assert _only_block(execution).ok is True
     _, kwargs = mock_rs.call_args
@@ -302,7 +302,7 @@ async def test_execute_recent_sessions_forwards_args() -> None:
 async def test_execute_recent_sessions_default_limit() -> None:
     plan = _plan(ToolCall(name="recent_sessions", args={}))
     mock_rs = AsyncMock(return_value=[])
-    with patch("agent.analytics_agent.execute.recent_sessions", new=mock_rs):
+    with patch("core.agent.analytics_agent.execute.recent_sessions", new=mock_rs):
         await execute_plan(plan)
     _, kwargs = mock_rs.call_args
     assert kwargs["limit"] >= 1
@@ -321,8 +321,8 @@ async def test_execute_tool_exception_isolated_to_its_block() -> None:
     mock_fr = AsyncMock(side_effect=ValueError("boom"))
     mock_th = AsyncMock(return_value=[{"topic": "еда", "count": 2, "avg_sentiment": 1.0}])
     with (
-        patch("agent.analytics_agent.execute.full_report", new=mock_fr),
-        patch("agent.analytics_agent.execute.topic_histogram", new=mock_th),
+        patch("core.agent.analytics_agent.execute.full_report", new=mock_fr),
+        patch("core.agent.analytics_agent.execute.topic_histogram", new=mock_th),
     ):
         execution = await execute_plan(plan)
 
@@ -346,7 +346,7 @@ async def test_execute_two_same_tool_calls_both_present_in_order() -> None:
         ToolCall(name="topic_histogram", args={"period_days": 14}),
     )
     mock_th = AsyncMock(side_effect=[["week"], ["fortnight"]])
-    with patch("agent.analytics_agent.execute.topic_histogram", new=mock_th):
+    with patch("core.agent.analytics_agent.execute.topic_histogram", new=mock_th):
         execution = await execute_plan(plan)
     blocks = execution["blocks"]
     assert [b.tool for b in blocks] == ["topic_histogram", "topic_histogram"]

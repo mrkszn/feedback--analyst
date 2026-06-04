@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.types import Message
 
-from bot_admin.handlers.statistics import (
+from presentations.telegram_admin.handlers.statistics import (
     PERIOD_7D,
     PERIOD_ALL,
     PERIOD_TODAY,
@@ -149,7 +149,7 @@ def test_format_report_renders_all_sections() -> None:
     ]
     from typing import cast
 
-    from services.statistics import FullReport
+    from core.services.statistics import FullReport
 
     messages = format_report(cast(FullReport, report))
     # format_report теперь возвращает list[str] (1-3 сообщения); склеиваем для
@@ -178,7 +178,7 @@ def test_format_report_renders_all_sections() -> None:
 def test_format_report_handles_empty() -> None:
     from typing import cast
 
-    from services.statistics import FullReport
+    from core.services.statistics import FullReport
 
     messages = format_report(cast(FullReport, _empty_report()))
     assert isinstance(messages, list)
@@ -194,7 +194,7 @@ def test_format_report_handles_empty() -> None:
 async def test_cmd_statistics_requires_admin() -> None:
     msg = _mk_message()
     with patch(
-        "bot_admin.handlers.statistics.require_admin",
+        "presentations.telegram_admin.handlers.statistics.require_admin",
         new=AsyncMock(return_value=False),
     ):
         await cmd_statistics(msg)
@@ -204,7 +204,7 @@ async def test_cmd_statistics_requires_admin() -> None:
 async def test_cmd_statistics_shows_period_keyboard() -> None:
     msg = _mk_message()
     with patch(
-        "bot_admin.handlers.statistics.require_admin",
+        "presentations.telegram_admin.handlers.statistics.require_admin",
         new=AsyncMock(return_value=True),
     ):
         await cmd_statistics(msg)
@@ -224,11 +224,11 @@ async def test_cb_statistics_calls_full_report_and_replies() -> None:
     cb = _mk_callback("stats:7d")
     with (
         patch(
-            "bot_admin.handlers.statistics.is_admin",
+            "presentations.telegram_admin.handlers.statistics.is_admin",
             new=AsyncMock(return_value=True),
         ),
         patch(
-            "bot_admin.handlers.statistics.full_report",
+            "presentations.telegram_admin.handlers.statistics.full_report",
             new=AsyncMock(return_value=_empty_report()),
         ) as m,
     ):
@@ -253,7 +253,7 @@ async def test_cb_statistics_calls_full_report_and_replies() -> None:
 async def test_cb_statistics_rejects_unknown_period() -> None:
     cb = _mk_callback("stats:weird")
     with patch(
-        "bot_admin.handlers.statistics.is_admin",
+        "presentations.telegram_admin.handlers.statistics.is_admin",
         new=AsyncMock(return_value=True),
     ):
         await cb_statistics_period(cb)
@@ -269,7 +269,7 @@ async def test_cb_statistics_rejects_non_admin() -> None:
     """
     cb = _mk_callback("stats:7d")
     with patch(
-        "bot_admin.handlers.statistics.is_admin",
+        "presentations.telegram_admin.handlers.statistics.is_admin",
         new=AsyncMock(return_value=False),
     ):
         await cb_statistics_period(cb)

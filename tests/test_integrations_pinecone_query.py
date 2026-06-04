@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from integrations.pinecone import query_similar_sessions
+from core.integrations.pinecone import query_similar_sessions
 
 
 def _mk_pinecone_mock(matches: list[dict]) -> tuple[MagicMock, MagicMock]:
@@ -40,7 +40,7 @@ async def test_query_returns_flattened_matches(monkeypatch: pytest.MonkeyPatch) 
         },
     ]
     pc_class, _q = _mk_pinecone_mock(matches)
-    monkeypatch.setattr("integrations.pinecone.Pinecone", pc_class)
+    monkeypatch.setattr("core.integrations.pinecone.Pinecone", pc_class)
 
     out = await query_similar_sessions(vector=[0.0] * 1536, top_k=5)
 
@@ -55,7 +55,7 @@ async def test_query_returns_flattened_matches(monkeypatch: pytest.MonkeyPatch) 
 
 async def test_query_invalid_vector_length_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     pc_class, query_mock = _mk_pinecone_mock([])
-    monkeypatch.setattr("integrations.pinecone.Pinecone", pc_class)
+    monkeypatch.setattr("core.integrations.pinecone.Pinecone", pc_class)
 
     with pytest.raises(ValueError):
         await query_similar_sessions(vector=[0.0] * 100)
@@ -65,7 +65,7 @@ async def test_query_invalid_vector_length_raises(monkeypatch: pytest.MonkeyPatc
 
 async def test_query_top_k_must_be_positive(monkeypatch: pytest.MonkeyPatch) -> None:
     pc_class, _q = _mk_pinecone_mock([])
-    monkeypatch.setattr("integrations.pinecone.Pinecone", pc_class)
+    monkeypatch.setattr("core.integrations.pinecone.Pinecone", pc_class)
 
     with pytest.raises(ValueError):
         await query_similar_sessions(vector=[0.0] * 1536, top_k=0)
@@ -73,7 +73,7 @@ async def test_query_top_k_must_be_positive(monkeypatch: pytest.MonkeyPatch) -> 
 
 async def test_query_passes_filter_and_namespace(monkeypatch: pytest.MonkeyPatch) -> None:
     pc_class, query_mock = _mk_pinecone_mock([])
-    monkeypatch.setattr("integrations.pinecone.Pinecone", pc_class)
+    monkeypatch.setattr("core.integrations.pinecone.Pinecone", pc_class)
 
     await query_similar_sessions(
         vector=[0.0] * 1536,
@@ -110,7 +110,7 @@ async def test_query_handles_object_response(monkeypatch: pytest.MonkeyPatch) ->
     pc_instance = MagicMock()
     pc_instance.Index = MagicMock(return_value=index_mock)
     pinecone_class = MagicMock(return_value=pc_instance)
-    monkeypatch.setattr("integrations.pinecone.Pinecone", pinecone_class)
+    monkeypatch.setattr("core.integrations.pinecone.Pinecone", pinecone_class)
 
     out = await query_similar_sessions(vector=[0.0] * 1536, top_k=1)
 

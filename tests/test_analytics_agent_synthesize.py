@@ -15,8 +15,8 @@ from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
-from agent.analytics_agent.synthesize import synthesize
-from agent.analytics_agent.types import AnalyticsAnswer, DataBlock
+from core.agent.analytics_agent.synthesize import synthesize
+from core.agent.analytics_agent.types import AnalyticsAnswer, DataBlock
 
 
 def _execution(
@@ -46,7 +46,9 @@ async def test_synthesize_clarification_skips_llm() -> None:
         clarification_question="Что показать по фидбэку?",
         interpretation="Неясно.",
     )
-    with patch("agent.analytics_agent.synthesize.chat_completion", new=AsyncMock()) as mock_chat:
+    with patch(
+        "core.agent.analytics_agent.synthesize.chat_completion", new=AsyncMock()
+    ) as mock_chat:
         answer = await synthesize("покажи", execution)
     mock_chat.assert_not_called()
     assert answer.clarification_needed is True
@@ -57,7 +59,7 @@ async def test_synthesize_clarification_skips_llm() -> None:
 
 async def test_synthesize_clarification_without_question_has_fallback() -> None:
     execution = _execution(clarification_needed=True, clarification_question="")
-    with patch("agent.analytics_agent.synthesize.chat_completion", new=AsyncMock()):
+    with patch("core.agent.analytics_agent.synthesize.chat_completion", new=AsyncMock()):
         answer = await synthesize("покажи", execution)
     assert answer.clarification_needed is True
     assert answer.answer_text  # non-empty fallback prompt
@@ -73,7 +75,7 @@ async def test_synthesize_requests_analytics_answer_response_model() -> None:
         blocks=[DataBlock(tool="full_report", ok=True, data={"n": 3})],
         tools_used=["full_report"],
     )
-    with patch("agent.analytics_agent.synthesize.chat_completion", new=mock_chat):
+    with patch("core.agent.analytics_agent.synthesize.chat_completion", new=mock_chat):
         await synthesize("что у нас", execution)
     _, kwargs = mock_chat.call_args
     assert kwargs["response_model"] is AnalyticsAnswer
@@ -86,7 +88,7 @@ async def test_synthesize_user_message_carries_question_interpretation_blocks() 
         interpretation="Топ жалоб за 7 дней.",
         tools_used=["topic_histogram"],
     )
-    with patch("agent.analytics_agent.synthesize.chat_completion", new=mock_chat):
+    with patch("core.agent.analytics_agent.synthesize.chat_completion", new=mock_chat):
         await synthesize("топ жалоб", execution)
 
     messages = mock_chat.call_args.args[0]
@@ -105,7 +107,7 @@ async def test_synthesize_returns_llm_answer() -> None:
         tools_used=["topic_histogram"],
     )
     with patch(
-        "agent.analytics_agent.synthesize.chat_completion",
+        "core.agent.analytics_agent.synthesize.chat_completion",
         new=AsyncMock(return_value=expected),
     ):
         answer = await synthesize("сколько жалоб", execution)
@@ -122,7 +124,7 @@ async def test_synthesize_serializes_datablock_objects() -> None:
         blocks=[DataBlock(tool="full_report", args={"period_days": 7}, ok=True, data={"x": 1})],
         tools_used=["full_report"],
     )
-    with patch("agent.analytics_agent.synthesize.chat_completion", new=mock_chat):
+    with patch("core.agent.analytics_agent.synthesize.chat_completion", new=mock_chat):
         await synthesize("q", execution)
     user = mock_chat.call_args.args[0][-1]["content"]
     assert "full_report" in user
@@ -134,7 +136,7 @@ async def test_synthesize_serializes_plain_dict_blocks() -> None:
         blocks=[{"tool": "recent_sessions", "ok": True, "data": [{"client_id": 9}]}],
         tools_used=["recent_sessions"],
     )
-    with patch("agent.analytics_agent.synthesize.chat_completion", new=mock_chat):
+    with patch("core.agent.analytics_agent.synthesize.chat_completion", new=mock_chat):
         await synthesize("q", execution)
     user = mock_chat.call_args.args[0][-1]["content"]
     assert "recent_sessions" in user
@@ -154,7 +156,7 @@ async def test_synthesize_handles_datetime_in_block_data() -> None:
         ],
         tools_used=["recent_sessions"],
     )
-    with patch("agent.analytics_agent.synthesize.chat_completion", new=mock_chat):
+    with patch("core.agent.analytics_agent.synthesize.chat_completion", new=mock_chat):
         answer = await synthesize("последние", execution)  # must not raise
     assert answer.answer_text == "ок"
     assert "2026-05-01" in mock_chat.call_args.args[0][-1]["content"]
@@ -171,7 +173,7 @@ async def test_synthesize_backfills_tools_used_when_llm_omits() -> None:
         blocks=[DataBlock(tool="full_report", ok=True, data={})],
         tools_used=["full_report", "topic_histogram"],
     )
-    with patch("agent.analytics_agent.synthesize.chat_completion", new=mock_chat):
+    with patch("core.agent.analytics_agent.synthesize.chat_completion", new=mock_chat):
         answer = await synthesize("q", execution)
     assert answer.tools_used == ["full_report", "topic_histogram"]
 
@@ -184,7 +186,7 @@ async def test_synthesize_keeps_llm_tools_used_when_present() -> None:
         blocks=[DataBlock(tool="full_report", ok=True, data={})],
         tools_used=["full_report"],
     )
-    with patch("agent.analytics_agent.synthesize.chat_completion", new=mock_chat):
+    with patch("core.agent.analytics_agent.synthesize.chat_completion", new=mock_chat):
         answer = await synthesize("q", execution)
     assert answer.tools_used == ["semantic_search"]
 
@@ -196,7 +198,7 @@ async def test_synthesize_backfills_interpretation_when_llm_omits() -> None:
         interpretation="Показываю за 7 дней.",
         tools_used=["full_report"],
     )
-    with patch("agent.analytics_agent.synthesize.chat_completion", new=mock_chat):
+    with patch("core.agent.analytics_agent.synthesize.chat_completion", new=mock_chat):
         answer = await synthesize("q", execution)
     assert answer.interpretation == "Показываю за 7 дней."
 
@@ -208,7 +210,7 @@ async def test_synthesize_forces_clarification_needed_false_on_data_path() -> No
         blocks=[DataBlock(tool="full_report", ok=True, data={})],
         tools_used=["full_report"],
     )
-    with patch("agent.analytics_agent.synthesize.chat_completion", new=mock_chat):
+    with patch("core.agent.analytics_agent.synthesize.chat_completion", new=mock_chat):
         answer = await synthesize("q", execution)
     assert answer.clarification_needed is False
 
@@ -216,7 +218,7 @@ async def test_synthesize_forces_clarification_needed_false_on_data_path() -> No
 async def test_synthesize_empty_blocks_still_calls_llm() -> None:
     mock_chat = AsyncMock(return_value=AnalyticsAnswer(answer_text="Данных нет."))
     execution = _execution(blocks=[], tools_used=[])
-    with patch("agent.analytics_agent.synthesize.chat_completion", new=mock_chat):
+    with patch("core.agent.analytics_agent.synthesize.chat_completion", new=mock_chat):
         answer = await synthesize("q", execution)
     mock_chat.assert_called_once()
     assert answer.answer_text == "Данных нет."

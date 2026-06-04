@@ -4,13 +4,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from langchain_core.messages import AIMessage
 
-from bot_admin.handlers.admin_agent import reply_via_agent, run_admin_agent
-from tools.admin_question_tools import (
+from core.tools.admin_question_tools import (
     create_question_tool,
     delete_question_tool,
     find_question_tool,
     list_active_questions_tool,
 )
+from presentations.telegram_admin.handlers.admin_agent import reply_via_agent, run_admin_agent
 
 # --------------------------------------------------------------------------- #
 # tool wrappers (return LLM-friendly strings)
@@ -18,7 +18,7 @@ from tools.admin_question_tools import (
 
 async def test_list_active_tool_empty() -> None:
     with patch(
-        "tools.admin_question_tools.list_questions",
+        "core.tools.admin_question_tools.list_questions",
         new=AsyncMock(return_value=[]),
     ):
         out = await list_active_questions_tool.ainvoke({})
@@ -35,7 +35,7 @@ async def test_list_active_tool_renders_rows() -> None:
         }
     ]
     with patch(
-        "tools.admin_question_tools.list_questions",
+        "core.tools.admin_question_tools.list_questions",
         new=AsyncMock(return_value=rows),
     ):
         out = await list_active_questions_tool.ainvoke({})
@@ -46,7 +46,7 @@ async def test_list_active_tool_renders_rows() -> None:
 
 async def test_find_tool_no_results() -> None:
     with patch(
-        "tools.admin_question_tools.find_question_by_text",
+        "core.tools.admin_question_tools.find_question_by_text",
         new=AsyncMock(return_value=[]),
     ):
         out = await find_question_tool.ainvoke({"query": "еда"})
@@ -55,7 +55,7 @@ async def test_find_tool_no_results() -> None:
 
 async def test_create_tool_handles_value_error() -> None:
     with patch(
-        "tools.admin_question_tools.create_question",
+        "core.tools.admin_question_tools.create_question",
         new=AsyncMock(side_effect=ValueError("dup")),
     ):
         out = await create_question_tool.ainvoke(
@@ -66,7 +66,7 @@ async def test_create_tool_handles_value_error() -> None:
 
 async def test_create_tool_success() -> None:
     with patch(
-        "tools.admin_question_tools.create_question",
+        "core.tools.admin_question_tools.create_question",
         new=AsyncMock(return_value={"id": "u1", "text": "q", "expected_type": "boolean"}),
     ):
         out = await create_question_tool.ainvoke(
@@ -77,7 +77,7 @@ async def test_create_tool_success() -> None:
 
 async def test_delete_tool_lookup_error() -> None:
     with patch(
-        "tools.admin_question_tools.delete_question",
+        "core.tools.admin_question_tools.delete_question",
         new=AsyncMock(side_effect=LookupError("nope")),
     ):
         out = await delete_question_tool.ainvoke({"question_id": "u404"})
@@ -86,7 +86,7 @@ async def test_delete_tool_lookup_error() -> None:
 
 async def test_delete_tool_success() -> None:
     with patch(
-        "tools.admin_question_tools.delete_question",
+        "core.tools.admin_question_tools.delete_question",
         new=AsyncMock(return_value=None),
     ):
         out = await delete_question_tool.ainvoke({"question_id": "u1"})
@@ -117,7 +117,7 @@ class _FakeLLM:
 async def test_run_admin_agent_returns_direct_reply() -> None:
     fake = _FakeLLM([AIMessage(content="Активных вопросов 3.")])
     with patch(
-        "bot_admin.handlers.admin_agent.get_chat_model",
+        "presentations.telegram_admin.handlers.admin_agent.get_chat_model",
         return_value=fake,
     ):
         reply = await run_admin_agent("сколько вопросов?")
@@ -140,11 +140,11 @@ async def test_run_admin_agent_executes_tool_then_replies() -> None:
     fake = _FakeLLM([tool_call, final])
     with (
         patch(
-            "bot_admin.handlers.admin_agent.get_chat_model",
+            "presentations.telegram_admin.handlers.admin_agent.get_chat_model",
             return_value=fake,
         ),
         patch(
-            "tools.admin_question_tools.list_questions",
+            "core.tools.admin_question_tools.list_questions",
             new=AsyncMock(
                 return_value=[
                     {
@@ -184,7 +184,7 @@ async def test_reply_via_agent_sends_answer() -> None:
     msg.answer = AsyncMock()
 
     with patch(
-        "bot_admin.handlers.admin_agent.run_admin_agent",
+        "presentations.telegram_admin.handlers.admin_agent.run_admin_agent",
         new=AsyncMock(return_value="hi"),
     ):
         await reply_via_agent(msg)

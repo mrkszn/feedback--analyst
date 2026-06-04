@@ -12,9 +12,9 @@ from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import Message
 
-from agent.nodes.synthesize_questions import QuestionDraft
-from bot_admin.handlers import question_voice as qv
-from bot_common.fsm.states import AdminFlow
+from channels.telegram.common.fsm.states import AdminFlow
+from core.agent.nodes.synthesize_questions import QuestionDraft
+from presentations.telegram_admin.handlers import question_voice as qv
 
 # ----------------------------- fixtures ------------------------------------ #
 
@@ -137,15 +137,15 @@ async def test_voice_intake_full_flow(state: FSMContext) -> None:
     ]
     with (
         patch(
-            "bot_admin.handlers.question_voice.download_voice_to_tmp",
+            "presentations.telegram_admin.handlers.question_voice.download_voice_to_tmp",
             new=AsyncMock(return_value=path),
         ),
         patch(
-            "bot_admin.handlers.question_voice.transcribe_voice",
+            "presentations.telegram_admin.handlers.question_voice.transcribe_voice",
             new=AsyncMock(return_value="о скорости и качестве"),
         ),
         patch(
-            "bot_admin.handlers.question_voice.synthesize_questions",
+            "presentations.telegram_admin.handlers.question_voice.synthesize_questions",
             new=AsyncMock(return_value=drafts),
         ),
     ):
@@ -182,15 +182,15 @@ async def test_voice_intake_partial(state: FSMContext) -> None:
     ]
     with (
         patch(
-            "bot_admin.handlers.question_voice.download_voice_to_tmp",
+            "presentations.telegram_admin.handlers.question_voice.download_voice_to_tmp",
             new=AsyncMock(return_value=path),
         ),
         patch(
-            "bot_admin.handlers.question_voice.transcribe_voice",
+            "presentations.telegram_admin.handlers.question_voice.transcribe_voice",
             new=AsyncMock(return_value="t"),
         ),
         patch(
-            "bot_admin.handlers.question_voice.synthesize_questions",
+            "presentations.telegram_admin.handlers.question_voice.synthesize_questions",
             new=AsyncMock(return_value=drafts),
         ),
     ):
@@ -211,11 +211,11 @@ async def test_voice_intake_empty_transcript(state: FSMContext) -> None:
 
     with (
         patch(
-            "bot_admin.handlers.question_voice.download_voice_to_tmp",
+            "presentations.telegram_admin.handlers.question_voice.download_voice_to_tmp",
             new=AsyncMock(return_value=path),
         ),
         patch(
-            "bot_admin.handlers.question_voice.transcribe_voice",
+            "presentations.telegram_admin.handlers.question_voice.transcribe_voice",
             new=AsyncMock(return_value="  "),
         ),
     ):
@@ -236,15 +236,15 @@ async def test_voice_intake_no_drafts(state: FSMContext) -> None:
 
     with (
         patch(
-            "bot_admin.handlers.question_voice.download_voice_to_tmp",
+            "presentations.telegram_admin.handlers.question_voice.download_voice_to_tmp",
             new=AsyncMock(return_value=path),
         ),
         patch(
-            "bot_admin.handlers.question_voice.transcribe_voice",
+            "presentations.telegram_admin.handlers.question_voice.transcribe_voice",
             new=AsyncMock(return_value="t"),
         ),
         patch(
-            "bot_admin.handlers.question_voice.synthesize_questions",
+            "presentations.telegram_admin.handlers.question_voice.synthesize_questions",
             new=AsyncMock(return_value=[]),
         ),
     ):
@@ -271,7 +271,7 @@ async def test_draft_confirm(state: FSMContext) -> None:
     cb = _make_callback(f"draft:confirm:{draft_id}", message=msg)
 
     with patch(
-        "bot_admin.handlers.question_voice.create_question",
+        "presentations.telegram_admin.handlers.question_voice.create_question",
         new=AsyncMock(return_value={"id": "qid-1"}),
     ) as create_mock:
         await qv.admin_handle_draft_confirm(cb, state)
@@ -313,7 +313,7 @@ async def test_draft_cancel(state: FSMContext) -> None:
     msg = _make_message()
     cb = _make_callback(f"draft:cancel:{draft_id}", message=msg)
     with patch(
-        "bot_admin.handlers.question_voice.create_question",
+        "presentations.telegram_admin.handlers.question_voice.create_question",
         new=AsyncMock(),
     ) as create_mock:
         await qv.admin_handle_draft_cancel(cb, state)
@@ -345,7 +345,7 @@ async def test_draft_regen(state: FSMContext) -> None:
     new = QuestionDraft(text="NewQ?", metric_key="new", expected_type="number")
 
     with patch(
-        "bot_admin.handlers.question_voice.regenerate_single_question",
+        "presentations.telegram_admin.handlers.question_voice.regenerate_single_question",
         new=AsyncMock(return_value=new),
     ) as regen_mock:
         await qv.admin_handle_draft_regen(cb, state)
