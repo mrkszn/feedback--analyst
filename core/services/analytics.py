@@ -1,15 +1,15 @@
 """Phase 3 admin analytics — aggregate Supabase + Pinecone в Python.
 
-Все функции async и принимают опциональный `db: Client` для тестов (паттерн из
-`services.questions`). Тяжёлой агрегации в SQL не делаем — MVP-объёмы (<<100к
-строк) спокойно агрегируются в памяти, а Supabase REST не даёт удобного
-GROUP BY поверх JSONB без RPC. Когда объёмы вырастут — переносим тяжёлые
-функции в Postgres views/RPC, сигнатура останется.
+Все функции async и принимают `storage: StorageAdapter | None` (новый DI-шов) и
+`db: Client | None` (back-compat). Тяжёлой агрегации в SQL не делаем — MVP-объёмы
+(<<100к строк) спокойно агрегируются в памяти; storage только отдаёт строки.
+
+`embed_text` / `query_similar_sessions` импортируются на уровне модуля и зовутся
+напрямую (см. core/storage/vector/* для Protocol-обёртки, используемой в каналах).
 """
 
 from __future__ import annotations
 
-import asyncio
 from collections import defaultdict
 from datetime import datetime
 from typing import Any, Literal, TypedDict, cast
@@ -18,7 +18,8 @@ from supabase import Client
 
 from core.integrations.openai_embed import embed_text
 from core.integrations.pinecone import query_similar_sessions
-from core.storage.supabase_client import get_supabase
+from core.storage.adapters.supabase import SupabaseStorage
+from core.storage.protocol import StorageAdapter
 
 GroupBy = Literal["day", "week", "none"]
 Sentiment = Literal["positive", "neutral", "negative"]
@@ -28,6 +29,10 @@ _SENTIMENT_SCORE: dict[str, float] = {
     "neutral": 0.0,
     "negative": -1.0,
 }
+
+
+def _storage(storage: StorageAdapter | None, db: Client | None) -> StorageAdapter:
+    return storage or SupabaseStorage(db)
 
 
 class MetricPoint(TypedDict):
@@ -151,6 +156,7 @@ async def aggregate_metric(
     date_to: datetime,
     group_by: GroupBy = "day",
     *,
+    storage: StorageAdapter | None = None,
     db: Client | None = None,
 ) -> list[MetricPoint]:
     """Aggregate session_answers.marked_value для вопроса с заданным
@@ -164,37 +170,22 @@ async def aggregate_metric(
     if group_by not in ("day", "week", "none"):
         raise ValueError(f"unknown group_by {group_by!r}")
 
-    db = db or get_supabase()
+    store = _storage(storage, db)
 
-    def _q_questions() -> Any:
-        return (
-            db.table("questions")
-            .select("id, metric_key")
-            .eq("metric_key", metric_key)
-            .limit(1)
-            .execute()
-        )
-
-    q_resp = await asyncio.to_thread(_q_questions)
-    if not q_resp.data:
+    question = await store.get_question_by_metric_key(metric_key)
+    if question is None:
         return []
-    question_id = q_resp.data[0]["id"]
+    question_id = question["id"]
 
     iso_from = date_from.isoformat()
     iso_to = date_to.isoformat()
 
-    def _q_answers() -> Any:
-        return (
-            db.table("session_answers")
-            .select("created_at, marked_value")
-            .eq("question_id", question_id)
-            .gte("created_at", iso_from)
-            .lte("created_at", iso_to)
-            .execute()
-        )
-
-    a_resp = await asyncio.to_thread(_q_answers)
-    rows = list(a_resp.data or [])
+    rows = await store.fetch_answers_for_question(
+        question_id=question_id,
+        date_from=iso_from,
+        date_to=iso_to,
+        columns="created_at, marked_value",
+    )
 
     buckets: dict[str, list[float]] = defaultdict(list)
     counts: dict[str, int] = defaultdict(int)
@@ -229,6 +220,7 @@ async def categorical_distribution(
     date_from: datetime,
     date_to: datetime,
     *,
+    storage: StorageAdapter | None = None,
     db: Client | None = None,
 ) -> CategoricalDistribution:
     """Распределение ответов по категориям для одного `metric_key`.
@@ -244,19 +236,10 @@ async def categorical_distribution(
     if date_from > date_to:
         raise ValueError("date_from must be <= date_to")
 
-    db = db or get_supabase()
+    store = _storage(storage, db)
 
-    def _q_question() -> Any:
-        return (
-            db.table("questions")
-            .select("id, metric_key, expected_type, enum_values")
-            .eq("metric_key", metric_key)
-            .limit(1)
-            .execute()
-        )
-
-    q_resp = await asyncio.to_thread(_q_question)
-    if not q_resp.data:
+    question = await store.get_question_by_metric_key(metric_key)
+    if question is None:
         return CategoricalDistribution(
             metric_key=metric_key,
             expected_type="unknown",
@@ -265,7 +248,6 @@ async def categorical_distribution(
             unknown=0,
             enum_values=None,
         )
-    question = q_resp.data[0]
     question_id = question["id"]
     expected_type = str(question.get("expected_type") or "unknown")
     raw_enum = question.get("enum_values")
@@ -278,18 +260,12 @@ async def categorical_distribution(
     iso_from = date_from.isoformat()
     iso_to = date_to.isoformat()
 
-    def _q_answers() -> Any:
-        return (
-            db.table("session_answers")
-            .select("marked_value")
-            .eq("question_id", question_id)
-            .gte("created_at", iso_from)
-            .lte("created_at", iso_to)
-            .execute()
-        )
-
-    a_resp = await asyncio.to_thread(_q_answers)
-    rows = list(a_resp.data or [])
+    rows = await store.fetch_answers_for_question(
+        question_id=question_id,
+        date_from=iso_from,
+        date_to=iso_to,
+        columns="marked_value",
+    )
 
     counts: dict[str, int] = defaultdict(int)
     unknown = 0
@@ -346,6 +322,7 @@ async def topic_histogram(
     date_to: datetime,
     sentiment_filter: Sentiment | None = None,
     *,
+    storage: StorageAdapter | None = None,
     db: Client | None = None,
 ) -> list[TopicCount]:
     """Подсчёт упоминаний топиков из `sessions.feedback_summary.topics[]`.
@@ -357,22 +334,15 @@ async def topic_histogram(
     if sentiment_filter is not None and sentiment_filter not in _SENTIMENT_SCORE:
         raise ValueError(f"unknown sentiment_filter {sentiment_filter!r}")
 
-    db = db or get_supabase()
+    store = _storage(storage, db)
     iso_from = date_from.isoformat()
     iso_to = date_to.isoformat()
 
-    def _q() -> Any:
-        return (
-            db.table("sessions")
-            .select("feedback_summary, started_at")
-            .gte("started_at", iso_from)
-            .lte("started_at", iso_to)
-            .not_.is_("feedback_summary", "null")
-            .execute()
-        )
-
-    resp = await asyncio.to_thread(_q)
-    rows = list(resp.data or [])
+    rows = await store.fetch_sessions_with_feedback(
+        date_from=iso_from,
+        date_to=iso_to,
+        columns="feedback_summary, started_at",
+    )
 
     topic_counts: dict[str, int] = defaultdict(int)
     topic_sentiments: dict[str, list[float]] = defaultdict(list)
@@ -416,6 +386,7 @@ async def summary_overview(
     date_from: datetime,
     date_to: datetime,
     *,
+    storage: StorageAdapter | None = None,
     db: Client | None = None,
 ) -> SummaryOverview:
     """Одна сводка для /insights — sessions count, avg sentiment, top-3
@@ -424,21 +395,15 @@ async def summary_overview(
     if date_from > date_to:
         raise ValueError("date_from must be <= date_to")
 
-    db = db or get_supabase()
+    store = _storage(storage, db)
     iso_from = date_from.isoformat()
     iso_to = date_to.isoformat()
 
-    def _q() -> Any:
-        return (
-            db.table("sessions")
-            .select("feedback_summary, started_at")
-            .gte("started_at", iso_from)
-            .lte("started_at", iso_to)
-            .execute()
-        )
-
-    resp = await asyncio.to_thread(_q)
-    rows = list(resp.data or [])
+    rows = await store.fetch_sessions_in_window(
+        date_from=iso_from,
+        date_to=iso_to,
+        columns="feedback_summary, started_at",
+    )
     sessions_count = len(rows)
 
     sentiments: list[float] = []
@@ -452,8 +417,12 @@ async def summary_overview(
 
     avg_sentiment = (sum(sentiments) / len(sentiments)) if sentiments else None
 
-    pos_topics = await topic_histogram(date_from, date_to, sentiment_filter="positive", db=db)
-    neg_topics = await topic_histogram(date_from, date_to, sentiment_filter="negative", db=db)
+    pos_topics = await topic_histogram(
+        date_from, date_to, sentiment_filter="positive", storage=store
+    )
+    neg_topics = await topic_histogram(
+        date_from, date_to, sentiment_filter="negative", storage=store
+    )
 
     return cast(
         SummaryOverview,
@@ -474,6 +443,7 @@ async def semantic_search(
     query_text: str,
     top_k: int = 20,
     *,
+    storage: StorageAdapter | None = None,
     db: Client | None = None,
 ) -> list[SemanticHit]:
     """Natural-language поиск по client-cards. Embed → Pinecone query →
@@ -494,31 +464,19 @@ async def semantic_search(
     if not session_ids:
         return []
 
-    db = db or get_supabase()
+    store = _storage(storage, db)
 
-    def _q_sessions() -> Any:
-        return (
-            db.table("sessions")
-            .select("id, client_id, feedback_summary, started_at")
-            .in_("id", session_ids)
-            .execute()
-        )
-
-    def _q_cards() -> Any:
-        return (
-            db.table("client_cards")
-            .select("session_id, summary_text")
-            .in_("session_id", session_ids)
-            .execute()
-        )
-
-    s_resp, c_resp = await asyncio.gather(
-        asyncio.to_thread(_q_sessions),
-        asyncio.to_thread(_q_cards),
+    sessions_rows = await store.fetch_sessions_by_ids(
+        session_ids=session_ids,
+        columns="id, client_id, feedback_summary, started_at",
     )
-    sessions_by_id: dict[str, dict[str, Any]] = {str(r["id"]): r for r in (s_resp.data or [])}
+    cards_rows = await store.fetch_cards_by_sessions(
+        session_ids=session_ids,
+        columns="session_id, summary_text",
+    )
+    sessions_by_id: dict[str, dict[str, Any]] = {str(r["id"]): r for r in sessions_rows}
     cards_by_session: dict[str, str] = {
-        str(r["session_id"]): str(r.get("summary_text") or "") for r in (c_resp.data or [])
+        str(r["session_id"]): str(r.get("summary_text") or "") for r in cards_rows
     }
 
     out: list[SemanticHit] = []
@@ -548,6 +506,7 @@ async def client_profile(
     telegram_id: int,
     *,
     recent_cards_limit: int = 3,
+    storage: StorageAdapter | None = None,
     db: Client | None = None,
 ) -> ClientProfile:
     """Полный профиль клиента: все сессии + последние N карточек + сводка
@@ -556,47 +515,21 @@ async def client_profile(
     if recent_cards_limit <= 0:
         raise ValueError("recent_cards_limit must be positive")
 
-    db = db or get_supabase()
+    store = _storage(storage, db)
 
-    def _q_client() -> Any:
-        return (
-            db.table("clients")
-            .select("telegram_id, name")
-            .eq("telegram_id", telegram_id)
-            .limit(1)
-            .execute()
-        )
-
-    c_resp = await asyncio.to_thread(_q_client)
-    if not c_resp.data:
+    client_row = await store.get_client(telegram_id)
+    if client_row is None:
         raise LookupError(f"client {telegram_id} not found")
-    client_row = c_resp.data[0]
 
-    def _q_sessions() -> Any:
-        return (
-            db.table("sessions")
-            .select("id, started_at, feedback_summary")
-            .eq("client_id", telegram_id)
-            .order("started_at", desc=True)
-            .execute()
-        )
-
-    def _q_cards() -> Any:
-        return (
-            db.table("client_cards")
-            .select("session_id, summary_text, created_at")
-            .eq("client_id", telegram_id)
-            .order("created_at", desc=True)
-            .limit(recent_cards_limit)
-            .execute()
-        )
-
-    s_resp, c2_resp = await asyncio.gather(
-        asyncio.to_thread(_q_sessions),
-        asyncio.to_thread(_q_cards),
+    sessions = await store.fetch_sessions_for_client(
+        client_id=telegram_id,
+        columns="id, started_at, feedback_summary",
     )
-    sessions = list(s_resp.data or [])
-    cards = list(c2_resp.data or [])
+    cards = await store.fetch_cards_for_client(
+        client_id=telegram_id,
+        columns="session_id, summary_text, created_at",
+        limit=recent_cards_limit,
+    )
 
     last_session_at = (
         str(sessions[0]["started_at"]) if sessions and sessions[0].get("started_at") else None

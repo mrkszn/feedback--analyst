@@ -1,5 +1,3 @@
-import asyncio
-
 from aiogram import F, Router
 from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
@@ -11,7 +9,7 @@ from aiogram.types import (
 )
 
 from channels.telegram.common.fsm.states import AdminFlow
-from core.services.admin_auth import is_admin
+from core.services.admin_auth import add_admin, is_admin
 from core.services.questions import (
     create_question,
     deactivate_all_questions,
@@ -19,7 +17,6 @@ from core.services.questions import (
     list_questions,
     update_question,
 )
-from core.storage.supabase_client import get_supabase
 from presentations.telegram_admin.keyboards import BTN_ADD_QUESTION, BTN_QUESTIONS
 
 router = Router(name="admin_questions")
@@ -392,19 +389,12 @@ async def admin_invite_admin(message: Message, command: CommandObject) -> None:
         await message.answer("Использование: /invite_admin <telegram_id>")
         return
     inviter = message.from_user.id if message.from_user else None
-    db = get_supabase()
     try:
-        await asyncio.to_thread(
-            lambda: (
-                db.table("admin_users")
-                .insert({"telegram_id": target_id, "invited_by": inviter})
-                .execute()
-            )
-        )
+        await add_admin(target_id, invited_by=inviter)
+    except ValueError:
+        await message.answer("Этот telegram_id уже админ.")
+        return
     except Exception as exc:
-        if "23505" in str(exc):
-            await message.answer("Этот telegram_id уже админ.")
-            return
         await message.answer(f"Ошибка БД: {exc}")
         return
     await message.answer(f"Готово: {target_id} добавлен в admin_users.")

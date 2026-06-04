@@ -1,10 +1,19 @@
-import asyncio
+"""Tool: persist an interview answer with its extracted metric.
+
+DI: `storage: StorageAdapter | None` (new) + `db: Client | None` (back-compat).
+"""
+
 from typing import Any, cast
 from uuid import UUID
 
 from supabase import Client
 
-from core.storage.supabase_client import get_supabase
+from core.storage.adapters.supabase import SupabaseStorage
+from core.storage.protocol import StorageAdapter
+
+
+def _storage(storage: StorageAdapter | None, db: Client | None) -> StorageAdapter:
+    return storage or SupabaseStorage(db)
 
 
 async def save_answer_with_metric(
@@ -13,25 +22,19 @@ async def save_answer_with_metric(
     question_id: str | UUID,
     answer_text: str,
     marked_value: Any,
+    storage: StorageAdapter | None = None,
     db: Client | None = None,
 ) -> int:
     if not answer_text.strip():
         raise ValueError("answer_text must not be empty")
 
-    db = db or get_supabase()
-    resp = await asyncio.to_thread(
-        lambda: (
-            db.table("session_answers")
-            .insert(
-                {
-                    "session_id": str(session_id),
-                    "question_id": str(question_id),
-                    "answer_text": answer_text,
-                    "marked_value": marked_value,
-                }
-            )
-            .execute()
-        )
+    store = _storage(storage, db)
+    row = await store.insert_answer(
+        {
+            "session_id": str(session_id),
+            "question_id": str(question_id),
+            "answer_text": answer_text,
+            "marked_value": marked_value,
+        }
     )
-    row = cast(dict[str, Any], resp.data[0])
-    return int(row["id"])
+    return int(cast(dict[str, Any], row)["id"])

@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -18,8 +17,7 @@ from core.services.analytics import (
     summary_overview,
     topic_histogram,
 )
-from core.services.questions import list_questions
-from core.storage.supabase_client import get_supabase
+from core.services.questions import get_question_expected_type, list_questions
 from presentations.http_api.auth.jwt import issue_token
 from presentations.http_api.auth.telegram_webapp import validate_initdata
 from presentations.http_api.deps.auth import current_admin
@@ -123,27 +121,9 @@ async def overview(
 
 
 async def _question_expected_type(metric_key: str) -> str | None:
-    """Same shape as presentations.telegram_admin.handlers.analytics_commands._question_expected_type.
-
-    Duplicated (6 lines) rather than reaching into telegram_admin from http_api —
-    keeps the two entry points decoupled.
-    """
-    db = get_supabase()
-
-    def _q() -> Any:
-        return (
-            db.table("questions")
-            .select("expected_type")
-            .eq("metric_key", metric_key)
-            .limit(1)
-            .execute()
-        )
-
-    resp = await asyncio.to_thread(_q)
-    if not resp.data:
-        return None
-    et = resp.data[0].get("expected_type")
-    return str(et) if et is not None else None
+    """Thin wrapper over the questions service so this route doesn't reach into
+    storage directly (CLAUDE.md invariant 5)."""
+    return await get_question_expected_type(metric_key)
 
 
 @router.get("/metrics", response_model=MetricsResponse)

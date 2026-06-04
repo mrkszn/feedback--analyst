@@ -9,11 +9,13 @@ Single function `full_report(date_from, date_to)` собирает разом:
 - последние N резюме отзывов
 
 Период `date_from=None` → от самой ранней `sessions.started_at` (= «всё время»).
+
+DI: `storage: StorageAdapter | None` (new) + `db: Client | None` (back-compat).
+`get_supabase` остаётся импортированным — это патч-точка существующих тестов.
 """
 
 from __future__ import annotations
 
-import asyncio
 import csv
 import io
 from collections import defaultdict
@@ -22,6 +24,8 @@ from typing import Any, Literal, TypedDict, cast
 
 from supabase import Client
 
+from core.storage.adapters.supabase import SupabaseStorage
+from core.storage.protocol import StorageAdapter
 from core.storage.supabase_client import get_supabase
 
 Sentiment = Literal["positive", "neutral", "negative"]
@@ -31,6 +35,10 @@ _SENTIMENT_SCORE: dict[str, float] = {
     "neutral": 0.0,
     "negative": -1.0,
 }
+
+
+def _storage(storage: StorageAdapter | None, db: Client | None) -> StorageAdapter:
+    return storage or SupabaseStorage(db or get_supabase())
 
 
 class SentimentCounts(TypedDict):
@@ -93,28 +101,6 @@ class FullReport(TypedDict):
 
 # --------------------------------------------------------------------------- #
 # helpers
-
-
-async def _earliest_started_at(db: Client) -> datetime | None:
-    """Возвращает самую раннюю `sessions.started_at` или None (БД пуста)."""
-
-    def _q() -> Any:
-        return (
-            db.table("sessions")
-            .select("started_at")
-            .order("started_at", desc=False)
-            .limit(1)
-            .execute()
-        )
-
-    resp = await asyncio.to_thread(_q)
-    rows = resp.data or []
-    if not rows:
-        return None
-    raw = rows[0].get("started_at")
-    if not raw:
-        return None
-    return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
 
 
 def _classify_topic(rows: list[TopicRow]) -> tuple[list[TopicRow], list[TopicRow], list[TopicRow]]:
@@ -269,6 +255,7 @@ async def full_report(
     *,
     period_label: str = "период",
     recent_limit: int = 5,
+    storage: StorageAdapter | None = None,
     db: Client | None = None,
 ) -> FullReport:
     """Собирает полный отчёт за окно [date_from, date_to].
@@ -279,51 +266,28 @@ async def full_report(
     if date_from is not None and date_from > date_to:
         raise ValueError("date_from must be <= date_to")
 
-    db = db or get_supabase()
+    store = _storage(storage, db)
 
     if date_from is None:
-        date_from = await _earliest_started_at(db) or date_to
+        raw_earliest = await store.earliest_session_started_at()
+        if raw_earliest:
+            date_from = datetime.fromisoformat(raw_earliest.replace("Z", "+00:00"))
+        else:
+            date_from = date_to
 
     iso_from = date_from.isoformat()
     iso_to = date_to.isoformat()
 
-    def _q_sessions() -> Any:
-        return (
-            db.table("sessions")
-            .select("id, client_id, started_at, ended_at, feedback_summary")
-            .gte("started_at", iso_from)
-            .lte("started_at", iso_to)
-            .order("started_at", desc=True)
-            .execute()
-        )
-
-    def _q_cards() -> Any:
-        # клиентские карточки финализированных сессий — берём summary_text
-        return (
-            db.table("client_cards")
-            .select("session_id, summary_text, created_at")
-            .order("created_at", desc=True)
-            .limit(recent_limit * 4)  # подушка на случай если сессия вне периода
-            .execute()
-        )
-
-    def _q_questions() -> Any:
-        return (
-            db.table("questions")
-            .select("id, text, metric_key, expected_type, enum_values, is_active")
-            .eq("is_active", True)
-            .execute()
-        )
-
-    s_resp, c_resp, q_resp = await asyncio.gather(
-        asyncio.to_thread(_q_sessions),
-        asyncio.to_thread(_q_cards),
-        asyncio.to_thread(_q_questions),
+    sessions = await store.fetch_sessions_in_window_ordered(
+        date_from=iso_from,
+        date_to=iso_to,
+        columns="id, client_id, started_at, ended_at, feedback_summary",
     )
-
-    sessions = list(s_resp.data or [])
-    cards = list(c_resp.data or [])
-    questions = list(q_resp.data or [])
+    cards = await store.fetch_recent_cards(
+        columns="session_id, summary_text, created_at",
+        limit=recent_limit * 4,  # подушка на случай если сессия вне периода
+    )
+    questions = await store.list_questions(active_only=True)
 
     # ---------- activity ----------
     sessions_started = len(sessions)
@@ -375,17 +339,11 @@ async def full_report(
         session_ids = [str(s["id"]) for s in sessions]
         question_ids = [str(q["id"]) for q in questions]
 
-        def _q_answers() -> Any:
-            return (
-                db.table("session_answers")
-                .select("question_id, answer_text, marked_value")
-                .in_("session_id", session_ids)
-                .in_("question_id", question_ids)
-                .execute()
-            )
-
-        a_resp = await asyncio.to_thread(_q_answers)
-        answers = list(a_resp.data or [])
+        answers = await store.fetch_answers_for_sessions(
+            session_ids=session_ids,
+            question_ids=question_ids,
+            columns="question_id, answer_text, marked_value",
+        )
         answers_by_qid: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for a in answers:
             qid = str(a.get("question_id") or "")
@@ -440,6 +398,7 @@ async def recent_sessions(
     limit: int = 5,
     sentiment: Sentiment | None = None,
     *,
+    storage: StorageAdapter | None = None,
     db: Client | None = None,
 ) -> list[RecentSession]:
     """Последние N сессий (по started_at desc), опц. с фильтром по sentiment.
@@ -453,19 +412,12 @@ async def recent_sessions(
     if sentiment is not None and sentiment not in _SENTIMENT_SCORE:
         raise ValueError(f"unknown sentiment {sentiment!r}")
 
-    db = db or get_supabase()
+    store = _storage(storage, db)
 
-    def _q_sessions() -> Any:
-        return (
-            db.table("sessions")
-            .select("id, client_id, started_at, feedback_summary")
-            .order("started_at", desc=True)
-            .limit(limit * 4)
-            .execute()
-        )
-
-    s_resp = await asyncio.to_thread(_q_sessions)
-    sessions = list(s_resp.data or [])
+    sessions = await store.fetch_recent_sessions(
+        columns="id, client_id, started_at, feedback_summary",
+        limit=limit * 4,
+    )
 
     selected: list[dict[str, Any]] = []
     for s in sessions:
@@ -482,18 +434,12 @@ async def recent_sessions(
 
     session_ids = [str(s["id"]) for s in selected]
 
-    def _q_cards() -> Any:
-        return (
-            db.table("client_cards")
-            .select("session_id, summary_text")
-            .in_("session_id", session_ids)
-            .execute()
-        )
-
-    c_resp = await asyncio.to_thread(_q_cards)
+    cards_rows = await store.fetch_cards_by_sessions(
+        session_ids=session_ids,
+        columns="session_id, summary_text",
+    )
     cards_by_sid: dict[str, str] = {
-        str(c.get("session_id") or ""): str(c.get("summary_text") or "")
-        for c in (c_resp.data or [])
+        str(c.get("session_id") or ""): str(c.get("summary_text") or "") for c in cards_rows
     }
 
     out: list[RecentSession] = []

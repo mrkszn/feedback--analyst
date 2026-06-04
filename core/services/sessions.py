@@ -1,10 +1,16 @@
-import asyncio
+"""Sessions service — session lifecycle + transcript over sessions/session_messages.
+
+DI: `storage: StorageAdapter | None` (new) + `db: Client | None` (back-compat).
+"""
+
+from datetime import UTC, datetime
 from typing import Any, Literal, TypedDict, cast
 from uuid import UUID
 
 from supabase import Client
 
-from core.storage.supabase_client import get_supabase
+from core.storage.adapters.supabase import SupabaseStorage
+from core.storage.protocol import StorageAdapter
 
 
 class FeedbackSummary(TypedDict):
@@ -14,13 +20,19 @@ class FeedbackSummary(TypedDict):
     emotion: str
 
 
-async def start_session(client_id: int, *, db: Client | None = None) -> UUID:
-    db = db or get_supabase()
-    resp = await asyncio.to_thread(
-        lambda: db.table("sessions").insert({"client_id": client_id}).execute()
-    )
-    row = cast(dict[str, Any], resp.data[0])
-    return UUID(row["id"])
+def _storage(storage: StorageAdapter | None, db: Client | None) -> StorageAdapter:
+    return storage or SupabaseStorage(db)
+
+
+async def start_session(
+    client_id: int,
+    *,
+    storage: StorageAdapter | None = None,
+    db: Client | None = None,
+) -> UUID:
+    store = _storage(storage, db)
+    row = await store.insert_session(client_id=client_id)
+    return UUID(cast(dict[str, Any], row)["id"])
 
 
 async def append_session_message(
@@ -28,6 +40,7 @@ async def append_session_message(
     role: Literal["user", "bot"],
     content: str,
     *,
+    storage: StorageAdapter | None = None,
     db: Client | None = None,
 ) -> int:
     if role not in ("user", "bot"):
@@ -35,16 +48,9 @@ async def append_session_message(
     if not content.strip():
         raise ValueError("content must not be empty")
 
-    db = db or get_supabase()
-    resp = await asyncio.to_thread(
-        lambda: (
-            db.table("session_messages")
-            .insert({"session_id": str(session_id), "role": role, "content": content})
-            .execute()
-        )
-    )
-    row = cast(dict[str, Any], resp.data[0])
-    return int(row["id"])
+    store = _storage(storage, db)
+    row = await store.insert_session_message(session_id=session_id, role=role, content=content)
+    return int(cast(dict[str, Any], row)["id"])
 
 
 async def save_feedback_summary(
@@ -54,6 +60,7 @@ async def save_feedback_summary(
     source: Literal["text", "voice"],
     summary: FeedbackSummary,
     language: str | None = None,
+    storage: StorageAdapter | None = None,
     db: Client | None = None,
 ) -> None:
     if source not in ("text", "voice"):
@@ -61,29 +68,26 @@ async def save_feedback_summary(
     if not raw_text.strip():
         raise ValueError("raw_text must not be empty")
 
-    db = db or get_supabase()
-    payload: dict[str, Any] = {
+    store = _storage(storage, db)
+    patch: dict[str, Any] = {
         "feedback_raw_text": raw_text,
         "feedback_source": source,
         "feedback_summary": summary,
         "language": language,
     }
-    resp = await asyncio.to_thread(
-        lambda: db.table("sessions").update(payload).eq("id", str(session_id)).execute()
-    )
-    if not resp.data:
+    rows = await store.update_session(session_id, patch)
+    if not rows:
         raise LookupError(f"session {session_id} not found")
 
 
-async def end_session(session_id: str | UUID, *, db: Client | None = None) -> None:
-    from datetime import UTC, datetime
-
-    db = db or get_supabase()
+async def end_session(
+    session_id: str | UUID,
+    *,
+    storage: StorageAdapter | None = None,
+    db: Client | None = None,
+) -> None:
+    store = _storage(storage, db)
     ended_at = datetime.now(UTC).isoformat()
-    resp = await asyncio.to_thread(
-        lambda: (
-            db.table("sessions").update({"ended_at": ended_at}).eq("id", str(session_id)).execute()
-        )
-    )
-    if not resp.data:
+    rows = await store.update_session(session_id, {"ended_at": ended_at})
+    if not rows:
         raise LookupError(f"session {session_id} not found")

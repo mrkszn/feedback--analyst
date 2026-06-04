@@ -1,24 +1,29 @@
-import asyncio
+"""Admin auth service — whitelist checks + bootstrap/invite over admin_users.
+
+DI: `storage: StorageAdapter | None` (new) + `db: Client | None` (back-compat).
+"""
+
 import hmac
 
 from supabase import Client
 
 from config import settings
-from core.storage.supabase_client import get_supabase
+from core.storage.adapters.supabase import SupabaseStorage
+from core.storage.protocol import StorageAdapter
 
 
-async def is_admin(telegram_id: int, *, db: Client | None = None) -> bool:
-    db = db or get_supabase()
-    resp = await asyncio.to_thread(
-        lambda: (
-            db.table("admin_users")
-            .select("telegram_id")
-            .eq("telegram_id", telegram_id)
-            .limit(1)
-            .execute()
-        )
-    )
-    return bool(resp.data)
+def _storage(storage: StorageAdapter | None, db: Client | None) -> StorageAdapter:
+    return storage or SupabaseStorage(db)
+
+
+async def is_admin(
+    telegram_id: int,
+    *,
+    storage: StorageAdapter | None = None,
+    db: Client | None = None,
+) -> bool:
+    store = _storage(storage, db)
+    return await store.is_admin(telegram_id)
 
 
 async def claim_admin(
@@ -26,6 +31,7 @@ async def claim_admin(
     token: str,
     *,
     name: str | None = None,
+    storage: StorageAdapter | None = None,
     db: Client | None = None,
 ) -> bool:
     expected = settings.admin_bootstrap_token
@@ -34,27 +40,34 @@ async def claim_admin(
     if not hmac.compare_digest(token, expected):
         return False
 
-    db = db or get_supabase()
-    count_resp = await asyncio.to_thread(
-        lambda: (
-            db.table("admin_users")
-            .select("telegram_id", count="exact")  # type: ignore[arg-type]
-            .limit(1)
-            .execute()
-        )
-    )
-    if (count_resp.count or 0) > 0:
+    store = _storage(storage, db)
+    if await store.count_admins() > 0:
         return False
 
     try:
-        await asyncio.to_thread(
-            lambda: (
-                db.table("admin_users").insert({"telegram_id": telegram_id, "name": name}).execute()
-            )
-        )
+        await store.insert_admin(telegram_id=telegram_id, name=name)
     except Exception as exc:
         # Race: another admin claimed between count and insert → unique violation.
         if "23505" in str(exc):
             return False
         raise
     return True
+
+
+async def add_admin(
+    telegram_id: int,
+    *,
+    invited_by: int | None = None,
+    storage: StorageAdapter | None = None,
+    db: Client | None = None,
+) -> None:
+    """Insert an admin (used by /invite_admin). Raises ValueError if already an
+    admin (Postgres unique violation 23505), so the caller can reply nicely.
+    """
+    store = _storage(storage, db)
+    try:
+        await store.insert_admin(telegram_id=telegram_id, invited_by=invited_by)
+    except Exception as exc:
+        if "23505" in str(exc):
+            raise ValueError(f"telegram_id {telegram_id} is already an admin") from exc
+        raise
