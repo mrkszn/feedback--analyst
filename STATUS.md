@@ -3,7 +3,7 @@
 > Live-обновляемый статус-файл. Куратор читает СЮДА, не в SendMessage-поток.
 > Все агенты команды обязаны обновлять соответствующий раздел при изменении состояния.
 
-**Last update:** 2026-06-04 12:16 UTC
+**Last update:** 2026-06-04 12:24 UTC — ✅ **M1 COMPLETE** (all 4 phases on main; team closing)
 
 ---
 
@@ -14,7 +14,9 @@
 | R1: layered structure | ✅ committed | `fa62669` | ~45 мин | 137 | +957 / -489 | 462 |
 | R2: StorageAdapter Protocol | ✅ committed | `64231ac` | ~25 мин | 17 | +1179 / -442 | 462 |
 | R3: template loader + tg-restaurant | ✅ committed | `6c20b70` | ~85 мин | 18 (15 new + pyproject/uv.lock/plan+status) | +746 / -0 | 475 |
-| **R4: docs + tg-clinic stub** | 🟢 gate green, READY TO COMMIT | (awaiting curator) | — | 8 (3 docs + README + tg-clinic ×4 files) | — | 475 |
+| R4: docs + tg-clinic stub | ✅ committed | `752c8aa` | — | 11 | +702 / -36 | 475 |
+
+**🎉 M1 REFACTOR COMPLETE** — R1 `fa62669` → R2 `64231ac` → R3 `6c20b70` → R4 `752c8aa`, all on main. 475 passing, ruff/mypy clean. Final review sweep skipped (curator decision: each phase had independent tester validation per checkpoint — extra read-only sweep = diminishing returns). Team `feat-m1-r3` closing.
 
 **Gate baseline (main = `64231ac`):**
 - pytest -q → 462 passed
@@ -74,6 +76,7 @@ Task IDs in team task list; ⏳ = in_progress, ⛔ = blocked, ✅ = done.
 
 ## Recent events (newest first)
 
+- 2026-06-04 12:24 — **M1 COMPLETE.** R4 committed `752c8aa` (11 files, +702/-36, 475 passed). All 4 phases on main. Curator skipped final-review sweep (per-checkpoint tester validation made it redundant). Shutdown_requests out; team `feat-m1-r3` closing. 🎉
 - 2026-06-04 12:16 — team-lead: R4 GATE GREEN. Tester #10 completed + team-lead re-verified from main loop (tg-clinic extraction proof, 475 passed, ruff/mypy clean). All 5 R4 tasks done. Commit plan posted. Sent curator sign-off. **R4 ready to commit (1 atomic, exclude _smoke_clinic).** After commit → final review + team closure.
 - 2026-06-04 12:02 — team-lead: ALL R4 implementer tasks (#6-#9) done, self-gate green (475 passed, ruff/mypy clean). Dispatching tester for #10 gate. 🧹 Flagged stray untracked `clients/_smoke_clinic/` for curator cleanup (rm denied to subagents; exclude from commit or delete).
 - 2026-06-04 11:50 — team-lead: R4 #6 (ARCHITECTURE.md) + #7 (ONBOARDING + TEMPLATE_AUTHORING) done, grounded in real tree/code. #8 (tg-clinic) in progress, #9 (README) next. Corrected #8: {clinic_context} rename OK (template .txt not live-loaded — grep core/agent/ = 0 refs). Extraction proof = tmp-dir, no committed _example_clinic.
