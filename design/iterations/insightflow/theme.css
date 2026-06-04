@@ -1,0 +1,141 @@
+/* =============================================================
+   InsightFlow — Telegram Mini App theme
+   Hybrid: Voice design-system structure + InsightFlow editorial
+   warmth (Instrument Serif numerals, paper surface, violet+cyan).
+   Grounded in the Voice token palette; serif/density/brand/theme
+   are all driven by CSS vars so the Tweaks panel can flip them.
+   ============================================================= */
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap');
+
+:root {
+  /* type */
+  --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --font-head: 'Instrument Serif', 'Times New Roman', serif;   /* swapped to sans by Tweaks */
+  --head-style: italic;
+
+  /* brand (default = Violet). Overridden by .brand-* classes */
+  --primary:        #7c3aed;
+  --primary-hover:  #6d28d9;
+  --primary-deep:   #5b21b6;
+  --primary-soft:   #ede6ff;
+  --primary-tint:   #faf6ff;
+  --primary-on:     #ffffff;
+  --accent:         #06b6d4;   /* cyan — the editorial second hue */
+  --grad-brand:     linear-gradient(135deg, #a855f7 0%, #7c3aed 50%, #5b21b6 100%);
+
+  /* fixed secondary hues (sentiment + data) */
+  --mint:    #34d5b0;
+  --amber:   #e7a23b;
+  --rose:    #e26d7a;
+  --success: #138a64;
+  --danger:  #c14a4a;
+  --warning: #b45309;
+
+  /* geometry */
+  --r-tag: 6px;
+  --r-input: 8px;
+  --r-card: 14px;
+  --r-sheet: 18px;
+  --r-full: 999px;
+
+  /* density (default comfortable). Overridden by .density-compact */
+  --card-pad: 16px;
+  --row-pad: 13px;
+  --kpi-size: 38px;
+  --section-gap: 18px;
+}
+
+/* ---- Light (paper) — the InsightFlow signature warmth -------- */
+:root, [data-theme="light"] {
+  --bg:          #f7f6f2;
+  --bg-soft:     #fbfaf7;
+  --surface:     #ffffff;
+  --surface-2:   #f1efe9;
+  --line:        #e6e2d8;
+  --line-strong: #d6d0c2;
+
+  --ink:    #0b0b12;
+  --ink-2:  #2a2a33;
+  --muted:  #6b6a74;
+  --muted-2:#9a98a1;
+
+  --scrim:  rgba(11,11,18,.45);
+  --shadow-card: 0 1px 0 rgba(11,11,18,.03), 0 8px 24px -14px rgba(11,11,18,.18);
+  --shadow-sheet: 0 -24px 48px -16px rgba(11,11,18,.22);
+  color-scheme: light;
+}
+
+/* ---- Dark --------------------------------------------------- */
+[data-theme="dark"] {
+  --bg:          #0b0e17;
+  --bg-soft:     #0f1320;
+  --surface:     #141a27;
+  --surface-2:   #1b2233;
+  --line:        #232c40;
+  --line-strong: #324056;
+
+  --ink:    #f3f4f8;
+  --ink-2:  #c5c9d6;
+  --muted:  #8a90a3;
+  --muted-2:#646b80;
+
+  --primary-soft: rgba(168,85,247,.18);
+  --primary-tint: rgba(124,58,237,.10);
+
+  --scrim:  rgba(2,4,10,.62);
+  --shadow-card: 0 1px 0 rgba(0,0,0,.4), 0 10px 26px -16px rgba(0,0,0,.7);
+  --shadow-sheet: 0 -24px 48px -16px rgba(0,0,0,.7);
+  color-scheme: dark;
+}
+
+/* ---- Brand palettes (Tweaks) -------------------------------- */
+.brand-indigo {
+  --primary: #4f46e5; --primary-hover: #4338ca; --primary-deep: #3730a3;
+  --primary-soft: #e4e3ff; --primary-tint: #f4f4ff; --accent: #06b6d4;
+  --grad-brand: linear-gradient(135deg, #818cf8 0%, #4f46e5 50%, #3730a3 100%);
+}
+[data-theme="dark"].brand-indigo { --primary-soft: rgba(99,102,241,.18); --primary-tint: rgba(79,70,229,.10); }
+
+.brand-teal {
+  --primary: #0e9aa8; --primary-hover: #0b7e8a; --primary-deep: #0a5f68;
+  --primary-soft: #d6f3f6; --primary-tint: #f0fbfc; --accent: #7c3aed;
+  --grad-brand: linear-gradient(135deg, #34d5cf 0%, #0e9aa8 50%, #0a5f68 100%);
+}
+[data-theme="dark"].brand-teal { --primary-soft: rgba(20,184,166,.18); --primary-tint: rgba(14,154,168,.10); }
+
+/* ---- Heading-font tweak ------------------------------------- */
+.headings-sans { --font-head: var(--font-sans); --head-style: normal; }
+
+/* ---- Density tweak ------------------------------------------ */
+.density-compact {
+  --card-pad: 12px;
+  --row-pad: 10px;
+  --kpi-size: 31px;
+  --section-gap: 13px;
+}
+
+/* ---- Base -------------------------------------------------- */
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-variant-numeric: tabular-nums;
+}
+
+/* serif numerals helper — the InsightFlow editorial signature */
+.serif-num {
+  font-family: var(--font-head);
+  font-style: var(--head-style);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+::selection { background: var(--primary); color: #fff; }
+
+@keyframes sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes bob { 0%,60%,100% { transform: translateY(0); opacity: .4; } 30% { transform: translateY(-3px); opacity: 1; } }
+@keyframes rise { from { transform: scaleY(0); opacity: 0; } to { transform: scaleY(1); opacity: 1; } }
+@keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: .35; } }

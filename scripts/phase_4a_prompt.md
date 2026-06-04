@@ -46,7 +46,7 @@
   - `mini_app_session_secret: str = ""` — JWT secret (для local dev можно пустую default; api должен валидировать что non-empty при запуске)
   - `allowed_mini_app_origins: str = ""` — comma-separated origins для CORS
 - Обнови `.env.example` соответствующими ключами + комментарии.
-- Комментарии должны явно упоминать предполагаемые URL: для local dev `http://localhost:3000` (Next.js dev) + ngrok-tunnel URL; для prod — будущий `https://miniapp.<domain>` или Vercel URL. Frontend живёт в **отдельном репозитории** `telegram-waiter-admin-miniapp` (Phase 4C), клонированном из template `telegram-miniapp-template` (Phase 4B).
+- Комментарии должны явно упоминать предполагаемые URL: для local dev `http://localhost:5173` (Vite dev) + ngrok-tunnel URL; для prod — будущий `https://telegram-waiter-admin-miniapp.vercel.app` (Vercel) или custom domain. Frontend живёт в **отдельном репозитории** `telegram-waiter-admin-miniapp` (Phase 4C), клонированном из template `telegram-miniapp-template` (Phase 4B).
 - Никаких HTTP-роутов в этом коммите.
 
 ### #3 — `feat(api): Telegram initData validation + JWT issue/verify`

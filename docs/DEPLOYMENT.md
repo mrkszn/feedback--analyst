@@ -1,8 +1,16 @@
 # Deployment to your own server
 
-План развёртывания всего стека (backend + 2 бота + Mini App) на собственный
-VPS. Без managed-сервисов вроде Vercel/Railway — мы сами поднимаем процессы
-через systemd за nginx с Let's Encrypt SSL.
+План развёртывания: backend + 2 бота → собственный VPS (systemd + nginx +
+Let's Encrypt); Mini App → **Vercel** (static SPA из Vite-сборки).
+
+> **Stack change (vs предыдущей итерации):** Mini App был запланирован как
+> Next.js production на VPS через `voice-miniapp.service`. Переключились на
+> Vite + React → static deploy на Vercel. Причина: Telegram Mini App это
+> pure-client SPA в WebView (SSR невозможен в принципе — initData/JWT
+> клиентские), Vite даёт ~200 KB bundle vs Next ~500 KB+, что критично для
+> cold-load UX в Telegram. Vercel хостит static build бесплатно с CDN и
+> auto-deploy из git push, что заменяет старую цепочку `pnpm build +
+> systemd voice-miniapp + nginx proxy_pass :3000`.
 
 ## Что хостим у себя vs. что остаётся в облаке
 
@@ -11,8 +19,8 @@ VPS. Без managed-сервисов вроде Vercel/Railway — мы сами
 | `bot_admin` (polling) | **свой VPS**, systemd |
 | `bot_guest` (polling) | **свой VPS**, systemd |
 | FastAPI `api.*` (HTTP API, uvicorn) | **свой VPS**, systemd |
-| Mini App (Next.js production) | **свой VPS**, systemd |
-| nginx reverse proxy + HTTPS | **свой VPS** |
+| Mini App (Vite static SPA) | **Vercel** (free tier, auto-deploy из git) |
+| nginx reverse proxy + HTTPS (для api.*) | **свой VPS** |
 | Supabase (Postgres + storage) | облако (managed) |
 | Pinecone (vector index) | облако (managed) |
 | OpenAI (chat + Whisper + embeddings) | облако (managed) |
@@ -38,7 +46,7 @@ VPS. Без managed-сервисов вроде Vercel/Railway — мы сами
 - **Timeweb Cloud** — от 250₽/мес (Россия, если нужна локальная юрисдикция)
 - **VK Cloud / Yandex Cloud** — гибче, дороже, для прод-нагрузок
 
-Memory headroom важен: Next.js dev/build кушает 600-800 MB; Python-процессы по 150-250 MB; nginx 30 MB. На 2GB можно жить, но 4GB даст запас под рост.
+Memory headroom: Python-процессы по 150-250 MB; nginx 30 MB; ffmpeg при voice — еще ~100 MB пиково. Mini App build больше не живёт на VPS (Vercel-managed) — раньше Next.js забирал 600-800 MB. На 2 GB сейчас комфортно; 4 GB остаётся рекомендацией под рост.
 
 ---
 
@@ -46,16 +54,22 @@ Memory headroom важен: Next.js dev/build кушает 600-800 MB; Python-п
 
 1. **VPS** — арендован, IP получен, корневой SSH-доступ настроен
 2. **Домен** — купленный и DNS управляется (Cloudflare / Namecheap / reg.ru)
-3. **DNS A-records** (укажи на VPS IP):
-   - `api.твой-домен` → IP
-   - `miniapp.твой-домен` → IP
-4. **Email для Let's Encrypt** (нужен один раз для регистрации сертификата)
+3. **DNS A-record для backend** (укажи на VPS IP):
+   - `api.твой-домен` → VPS IP
+   - Mini App хостится на Vercel; либо используем дефолтный
+     `telegram-waiter-admin-miniapp.vercel.app`, либо привязываем
+     `miniapp.твой-домен` (CNAME → `cname.vercel-dns.com.`). Custom domain
+     настраивается в Vercel dashboard, certificate auto-issued.
+4. **Email для Let's Encrypt** (нужен один раз для `api.твой-домен`)
 5. **Production credentials** — сейчас в `.env` у тебя dev-ключи; перед прод-деплоем:
    - Сгенерируй новый `MINI_APP_SESSION_SECRET` (`openssl rand -hex 32`)
    - Создай отдельный admin bot + guest bot у `@BotFather` с прод-username'ами
    - Возможно отдельный Supabase project (опц. — можно стартовать с того же)
    - Возможно отдельный Pinecone namespace (`PINECONE_NAMESPACE=prod`)
-6. **GitHub Personal Access Token** (read-only для private репозиториев — `telegram-waiter` + `telegram-waiter-admin-miniapp`)
+6. **Vercel account** — бесплатный tier хватит. Connect GitHub → импорт репо
+   `telegram-waiter-admin-miniapp`. Build command: `pnpm build`, Output dir:
+   `dist`, Framework preset: **Vite**.
+7. **GitHub Personal Access Token** (read-only для private репо `telegram-waiter` на VPS)
 
 ---
 
@@ -73,13 +87,14 @@ Memory headroom важен: Next.js dev/build кушает 600-800 MB; Python-п
 
 - Python 3.12 (через deadsnakes PPA или `apt install python3.12`)
 - `uv` — `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- Node.js 22 LTS — через NodeSource APT repo
-- `pnpm` — `npm install -g pnpm`
 - `nginx`
 - `certbot` + `python3-certbot-nginx`
 - `git`, `tmux` (для отладки)
 - `ffmpeg` — для voice-обработки в guest-боте
 - `jq` — для скриптов
+
+> Node.js / pnpm на VPS больше не нужны — Mini App собирается и хостится на
+> Vercel.
 
 ### Этап 3 — Клонировать репозитории (5 мин)
 
@@ -89,10 +104,10 @@ Memory headroom важен: Next.js dev/build кушает 600-800 MB; Python-п
 sudo mkdir -p /srv/voice && sudo chown deploy:deploy /srv/voice
 cd /srv/voice
 git clone https://<TOKEN>@github.com/mrkszn/feedback--analyst.git telegram-waiter
-git clone https://<TOKEN>@github.com/mrkszn/telegram-waiter-admin-miniapp.git
 ```
 
-Или через SSH deploy keys (рекомендую — токены протухают).
+Или через SSH deploy keys (рекомендую — токены протухают). Mini App клонировать
+на VPS НЕ нужно — он живёт на Vercel.
 
 ### Этап 4 — Backend setup (30 мин)
 
@@ -104,50 +119,60 @@ nano .env                       # подставить prod TELEGRAM tokens, MIN
 uv run python scripts/smoke.py  # smoke check creds (всё ли подтянуто)
 ```
 
-### Этап 5 — Mini App setup (20 мин)
+### Этап 5 — Mini App setup на Vercel (10 мин, web UI)
 
-```
-cd /srv/voice/telegram-waiter-admin-miniapp
-pnpm install
-cat > .env.production <<EOF
-NEXT_PUBLIC_API_BASE_URL=https://api.твой-домен
-NEXT_PUBLIC_AUTH_ENDPOINT=/admin/auth
-NEXT_PUBLIC_APP_ENV=production
-EOF
-pnpm build                      # ~2-3 мин, создаст .next/
-```
+Все шаги — в Vercel dashboard, никакого SSH:
 
-### Этап 6 — systemd units (15 мин)
+1. **Connect Git** — Vercel → New Project → Import репозиторий
+   `telegram-waiter-admin-miniapp` (после Phase 4C он будет создан).
+2. **Framework preset** — Vite (Vercel определит автоматически по
+   `vite.config.ts`).
+3. **Build command** — `pnpm build` (или Vercel default).
+4. **Output directory** — `dist`.
+5. **Environment variables** (Project Settings → Environment Variables):
+   - `VITE_API_BASE_URL=https://api.твой-домен`
+   - `VITE_AUTH_ENDPOINT=/admin/auth`
+   - `VITE_APP_ENV=production`
+6. **Domain** — либо оставь дефолт `*.vercel.app`, либо привяжи
+   `miniapp.твой-домен` (Vercel выдаст инструкции по CNAME / A-records).
+7. **Deploy** — Vercel автоматически собирает на каждый `git push` в main +
+   делает preview-deploy на каждый PR.
 
-Создать 4 файла в `/etc/systemd/system/`:
+В **Telegram BotFather** → admin bot → Configure Mini App → URL =
+`https://telegram-waiter-admin-miniapp.vercel.app` (или твой custom domain).
+
+### Этап 6 — systemd units на VPS (10 мин)
+
+Создать 3 файла в `/etc/systemd/system/`:
 
 - `voice-api.service` — uvicorn на 127.0.0.1:8000
 - `voice-bot-admin.service` — `python -m bot_admin`
 - `voice-bot-guest.service` — `python -m bot_guest`
-- `voice-miniapp.service` — `pnpm start` (Next.js production) на 127.0.0.1:3000
 
-Все 4 — с `Restart=always`, `RestartSec=10`, `User=deploy`, переменные через `EnvironmentFile=`. Готовые шаблоны можно нагенерить — см. ниже.
+Все 3 — с `Restart=always`, `RestartSec=10`, `User=deploy`, переменные через `EnvironmentFile=`. Готовые шаблоны можно нагенерить — см. ниже.
 
 ```
 sudo systemctl daemon-reload
-sudo systemctl enable --now voice-api voice-bot-admin voice-bot-guest voice-miniapp
+sudo systemctl enable --now voice-api voice-bot-admin voice-bot-guest
 sudo systemctl status voice-*
 ```
 
-### Этап 7 — nginx + Let's Encrypt SSL (20 мин)
+### Этап 7 — nginx + Let's Encrypt SSL для backend (15 мин)
 
-Два server-блока:
+Один server-блок:
 
 - `api.твой-домен` → `proxy_pass http://127.0.0.1:8000;`
-- `miniapp.твой-домен` → `proxy_pass http://127.0.0.1:3000;`
 
-Дополнительно: HSTS, gzip, `client_max_body_size 2M`, security headers
-(`X-Frame-Options DENY` — но не для miniapp! Telegram WebApp требует embedding, для miniapp используем `frame-ancestors https://web.telegram.org`).
+Дополнительно: HSTS, gzip, `client_max_body_size 2M`, security headers.
+`X-Frame-Options DENY` оставляем — backend frame'ить никто не должен. Mini App
+живёт на Vercel со своими headers; Telegram WebApp требует embedding только
+для frontend домена, а на Vercel это решается через `vercel.json` headers
+(`frame-ancestors https://web.telegram.org`).
 
 После nginx-конфига:
 
 ```
-sudo certbot --nginx -d api.твой-домен -d miniapp.твой-домен \
+sudo certbot --nginx -d api.твой-домен \
     --email твой@email --agree-tos --no-eff-email
 ```
 
@@ -156,7 +181,7 @@ Certbot пропишет `listen 443 ssl`, auto-renew через `systemctl time
 ### Этап 8 — Verify end-to-end (15 мин)
 
 1. `curl https://api.твой-домен/docs` → 200, видишь Swagger UI
-2. `curl https://miniapp.твой-домен` → 200, видишь Next.js root (или HTML с redirect logic)
+2. `curl https://telegram-waiter-admin-miniapp.vercel.app` (или твой custom domain) → 200, видишь Vite SPA index
 3. В Telegram: `/start` admin-боту → `/miniapp` → tap «Открыть Mini App»
    - Mini App открывается **внутри** Telegram
    - Auth flow: initData → JWT → /dashboard загружается
@@ -171,12 +196,13 @@ Certbot пропишет `listen 443 ssl`, auto-renew через `systemctl time
 Я могу подготовить `scripts/deploy/`:
 
 - `01_provision.sh` — хардинг + системные deps (запускается под root на свежем VPS)
-- `02_clone.sh` — git clone обоих репо
+- `02_clone.sh` — git clone backend
 - `03_setup_backend.sh` — uv sync + smoke check
-- `04_setup_miniapp.sh` — pnpm install + build
-- `05_systemd.sh` — генерит systemd units из шаблонов
-- `06_nginx.sh` — генерит nginx confs + запускает certbot
-- `07_verify.sh` — health-check endpoint pings
+- `04_systemd.sh` — генерит systemd units из шаблонов (3 unit'а — api + 2 бота)
+- `05_nginx.sh` — генерит nginx confs + запускает certbot (только `api.твой-домен`)
+- `06_verify.sh` — health-check endpoint pings
+
+Mini App деплой — через Vercel UI, скрипты не нужны.
 
 Это **отдельная мини-сессия** перед самим деплоем. Скажи когда готов — соберу.
 
@@ -184,18 +210,22 @@ Certbot пропишет `listen 443 ssl`, auto-renew через `systemctl time
 
 ## Update workflow после деплоя
 
-После любого `git push` в main:
+После `git push` в `telegram-waiter` (backend) → main:
 
 ```
+# Через GitHub Actions (см. .github/workflows/deploy.yml) — авто, без SSH.
+# Или вручную:
 ssh deploy@VPS
 cd /srv/voice/telegram-waiter && git pull && uv sync && \
     sudo systemctl restart voice-api voice-bot-admin voice-bot-guest
-
-cd /srv/voice/telegram-waiter-admin-miniapp && git pull && pnpm install --production && \
-    pnpm build && sudo systemctl restart voice-miniapp
 ```
 
-Можно автоматизировать через GitHub Actions + SSH deploy key (отдельная фаза если хочешь zero-touch deploys).
+После `git push` в `telegram-waiter-admin-miniapp` (frontend) → main:
+
+```
+# Ничего делать не надо — Vercel сам собирает и публикует.
+# Preview-deploys на каждый PR — тоже автоматически.
+```
 
 ---
 
@@ -215,8 +245,8 @@ cd /srv/voice/telegram-waiter-admin-miniapp && git pull && pnpm install --produc
 
 ## Мониторинг и алертинг (опц.)
 
-- **UptimeRobot** (free) — пинг каждые 5 мин на `https://api.твой-домен/docs` и `https://miniapp.твой-домен`. Шлёт email/Telegram при downtime
-- **Sentry** (free 5k events/мес) — error tracking для FastAPI и Next.js (опц.)
+- **UptimeRobot** (free) — пинг каждые 5 мин на `https://api.твой-домен/docs` и Vercel URL. Шлёт email/Telegram при downtime. Vercel сам показывает uptime в dashboard.
+- **Sentry** (free 5k events/мес) — error tracking для FastAPI и Vite SPA (опц.)
 - **journalctl** — встроенные логи systemd, ротация автоматическая
 - **htop / atop** — interactive process monitor для ad-hoc отладки
 - **Telegram self-bot** — кастомный hook от bot_admin, шлёт alert если /admin/overview возвращает 5xx

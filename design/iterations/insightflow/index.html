@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>InsightFlow · Telegram Mini App</title>
+<link rel="stylesheet" href="theme.css"/>
+<style>
+  html, body { margin: 0; min-height: 100vh; }
+  body {
+    display: flex; align-items: center; justify-content: center; padding: 28px 16px;
+    background:
+      radial-gradient(900px 600px at 80% -10%, color-mix(in srgb, var(--primary) 9%, transparent), transparent 60%),
+      #ece9e2;
+    transition: background .25s ease;
+  }
+  html[data-theme="dark"] body {
+    background:
+      radial-gradient(900px 600px at 80% -10%, color-mix(in srgb, var(--primary) 16%, transparent), transparent 60%),
+      #070a12;
+  }
+  #stage { position: relative; }
+  .phone {
+    width: 390px; height: 800px; border-radius: 46px;
+    background: #0c0f17; padding: 12px;
+    box-shadow: 0 40px 80px -28px rgba(11,11,18,.55), 0 2px 0 rgba(255,255,255,.05) inset;
+  }
+  .screen {
+    width: 100%; height: 100%; border-radius: 34px; overflow: hidden;
+    background: var(--bg); position: relative;
+  }
+  /* Telegram-style top chrome */
+  .tg-chrome {
+    height: 38px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 16px; background: var(--surface); border-bottom: 1px solid var(--line);
+    font-family: var(--font-sans); font-size: 13px; color: var(--muted);
+  }
+  .tg-chrome .l, .tg-chrome .r { display: flex; align-items: center; gap: 6px; }
+  .tg-chrome .title { font-weight: 600; color: var(--ink); letter-spacing: -.005em; }
+  .tg-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--mint); }
+  .side-label {
+    position: absolute; left: calc(50% + 232px); top: 50%;
+    transform: translateY(-50%); max-width: 300px; font-family: var(--font-sans); color: var(--muted);
+  }
+  .side-label .pill {
+    display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
+    background: var(--primary-soft); color: var(--primary-deep);
+    font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 12px;
+  }
+  .side-label h1 {
+    font-family: var(--font-head); font-style: var(--head-style); font-weight: 400;
+    font-size: 30px; line-height: 1.08; margin: 0 0 10px; color: var(--ink); letter-spacing: -.01em;
+  }
+  .side-label p { font-size: 14px; line-height: 20px; margin: 0; max-width: 30ch; }
+  @media (max-width: 940px) { .side-label { display: none; } }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="phone">
+    <div class="screen">
+      <div class="tg-chrome">
+        <div class="l"><span>9:41</span></div>
+        <div class="title">InsightFlow</div>
+        <div class="r"><span class="tg-dot"></span><span>WebApp</span></div>
+      </div>
+      <div id="root" style="height: calc(100% - 38px);"></div>
+    </div>
+  </div>
+  <div class="side-label">
+    <span class="pill"><span style="width:6px;height:6px;border-radius:999px;background:currentColor;display:inline-block"></span>Telegram Mini App</span>
+    <h1>InsightFlow для&nbsp;владельца</h1>
+    <p>Прототип админ-мини-аппа: дашборд, метрики, авто-сегменты, профили клиентов и AI-агент. Переключайте вкладки внизу, открывайте отзывы и клиентов. Tweaks в панели справа.</p>
+  </div>
+</div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="components.jsx"></script>
+<script type="text/babel" src="data.jsx"></script>
+<script type="text/babel" src="screens/Dashboard.jsx"></script>
+<script type="text/babel" src="screens/Metrics.jsx"></script>
+<script type="text/babel" src="screens/Topics.jsx"></script>
+<script type="text/babel" src="screens/Clients.jsx"></script>
+<script type="text/babel" src="screens/Ask.jsx"></script>
+<script type="text/babel" src="app.jsx"></script>
+<script type="text/babel">
+  function tryMount() {
+    if (!window.MiniApp || !window.useTweaks) return setTimeout(tryMount, 30);
+    ReactDOM.createRoot(document.getElementById('root')).render(<MiniApp/>);
+  }
+  tryMount();
+</script>
+</body>
+</html>

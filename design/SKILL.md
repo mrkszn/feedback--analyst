@@ -21,8 +21,10 @@ who outputs HTML artifacts _or_ production code, depending on the need.
   on customer feedback collected by a paired Telegram bot.
 - **Two surfaces**: Voice / Admin (purple, the Mini App) and
   Voice / Receiver (indigo, the customer-facing bot).
-- **Tech context**: Next.js 16 + Tailwind + shadcn/ui + Tremor charts.
-  Mobile-first (375 px baseline).
+- **Tech context**: Vite 5 + React 19 + Tailwind + shadcn/ui + Tremor charts.
+  Mobile-first (375 px baseline). (Stack switched from Next.js — Mini App is a
+  pure WebView SPA, SSR is impossible, so Vite gives ~200 KB bundle vs Next ~500
+  KB+ — critical for cold-load UX in Telegram.)
 - **Tone**: professional-warm, Linear / Notion / Stripe register — dense,
   business-focused, Russian-first copy, no marketing hype, max 1 emoji per
   screen.
@@ -40,6 +42,10 @@ who outputs HTML artifacts _or_ production code, depending on the need.
   type, spacing, components). Open any of them as a reference.
 - `ui_kits/admin/` — high-fidelity React+Babel UI kit for the six template
   screens of the Admin Mini App. `index.html` is a click-thru prototype.
+- `iterations/` — extended design experiments stacked on top of Voice tokens.
+  Currently: `iterations/insightflow/` (violet + cyan brand, Instrument Serif
+  italic headings, live theming via Tweaks panel). See `iterations/README.md`
+  for which iteration is the active reference for Phase 4B/4C.
 - `SKILL.md` — this file.
 
 ## Hard rules (the ones that get violated most)
