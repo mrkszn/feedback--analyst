@@ -2,7 +2,7 @@
 
 Ты — orchestrator Phase 4C. Запускаешься внутри **нового репозитория**
 `telegram-waiter-admin-miniapp`, который был создан через GitHub "Use this
-template" от `telegram-miniapp-template` (Phase 4B). Твоя задача — превратить
+template" от `telegram-miniapp-template-vite` (Phase 4B). Твоя задача — превратить
 generic template в **рабочий admin Mini App для конкретного проекта
 `telegram-waiter`**: заменить `src/routes/example/` на реальные 5 страниц с
 подключением к FastAPI backend.

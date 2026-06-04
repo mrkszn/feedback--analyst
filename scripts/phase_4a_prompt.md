@@ -46,7 +46,7 @@
   - `mini_app_session_secret: str = ""` — JWT secret (для local dev можно пустую default; api должен валидировать что non-empty при запуске)
   - `allowed_mini_app_origins: str = ""` — comma-separated origins для CORS
 - Обнови `.env.example` соответствующими ключами + комментарии.
-- Комментарии должны явно упоминать предполагаемые URL: для local dev `http://localhost:5173` (Vite dev) + ngrok-tunnel URL; для prod — будущий `https://telegram-waiter-admin-miniapp.vercel.app` (Vercel) или custom domain. Frontend живёт в **отдельном репозитории** `telegram-waiter-admin-miniapp` (Phase 4C), клонированном из template `telegram-miniapp-template` (Phase 4B).
+- Комментарии должны явно упоминать предполагаемые URL: для local dev `http://localhost:5173` (Vite dev) + ngrok-tunnel URL; для prod — будущий `https://telegram-waiter-admin-miniapp.vercel.app` (Vercel) или custom domain. Frontend живёт в **отдельном репозитории** `telegram-waiter-admin-miniapp` (Phase 4C), клонированном из template `telegram-miniapp-template-vite` (Phase 4B).
 - Никаких HTTP-роутов в этом коммите.
 
 ### #3 — `feat(api): Telegram initData validation + JWT issue/verify`
@@ -103,7 +103,7 @@
   if __name__ == "__main__":
       uvicorn.run("api.main:app", host="0.0.0.0", port=8000, reload=False)
   ```
-- Обнови `README.md` (если есть) или `docs/` коротким разделом «HTTP API: `uv run python -m api`», + curl-примеры для всех 7 endpoint'ов. В разделе укажи что **frontend Mini App живёт в отдельном репозитории `telegram-waiter-admin-miniapp`** (instance), который клонирован из публичного template `telegram-miniapp-template` (Phase 4B). Этот backend = только HTTP-API + auth, без UI.
+- Обнови `README.md` (если есть) или `docs/` коротким разделом «HTTP API: `uv run python -m api`», + curl-примеры для всех 7 endpoint'ов. В разделе укажи что **frontend Mini App живёт в отдельном репозитории `telegram-waiter-admin-miniapp`** (instance), который клонирован из публичного template `telegram-miniapp-template-vite` (Phase 4B). Этот backend = только HTTP-API + auth, без UI.
 - Тесты: оставшиеся 3 endpoint'a с моками services.
 
 ## Out of scope

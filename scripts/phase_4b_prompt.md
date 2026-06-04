@@ -1,7 +1,7 @@
-# Phase 4B — `telegram-miniapp-template` (reusable Vite + React skeleton)
+# Phase 4B — `telegram-miniapp-template-vite` (reusable Vite + React skeleton)
 
 Ты — orchestrator Phase 4B. Запускаешься внутри **нового пустого репозитория**
-`telegram-miniapp-template`. Твоя задача — построить **переиспользуемый
+`telegram-miniapp-template-vite`. Твоя задача — построить **переиспользуемый
 template** для admin Mini App'ов любых Telegram-бот проектов. Никакой
 domain-логики — только generic skeleton.
 

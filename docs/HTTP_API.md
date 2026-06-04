@@ -7,7 +7,7 @@ API — два независимых entry points, оба зовут одни �
 
 Frontend admin Mini App **живёт в отдельном репозитории**
 `telegram-waiter-admin-miniapp` — это инстанс, склонированный из публичного
-template `telegram-miniapp-template` (Phase 4B). Текущий репозиторий
+template `telegram-miniapp-template-vite` (Phase 4B). Текущий репозиторий
 содержит только backend + auth.
 
 ## Запуск

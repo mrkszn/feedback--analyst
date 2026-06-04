@@ -63,7 +63,7 @@ f4bda59  feat(api): admin routes — semantic, clients, ask + uvicorn entrypoint
 - **Rate limiting / abuse protection — нет.** MVP scope; добавить slowapi или edge-rate-limit когда Mini App пойдёт за пределы кучки админов.
 - **WebSocket / streaming для /ask — Backlog.** Сейчас polling-style request/response.
 - **Admin agent CRUD (`bot_admin/handlers/admin_agent.py`) — НЕ обёрнут в HTTP.** По плану 4A не требуется; редактирование вопросов остаётся в Telegram-боте.
-- **Готово для Phase 4B (template репозиторий `telegram-miniapp-template`):** auth flow (POST /admin/auth → JWT в localStorage), все 7 endpoint'ов отдают типизированный JSON, CORS configurable через env.
+- **Готово для Phase 4B (template репозиторий `telegram-miniapp-template-vite`):** auth flow (POST /admin/auth → JWT в localStorage), все 7 endpoint'ов отдают типизированный JSON, CORS configurable через env.
 - **Готово для Phase 4C (`telegram-waiter-admin-miniapp` — клон template):** ровно эти 7 endpoint'ов покрывают: dashboard (`/overview`), графики (`/metrics`, `/topics`), поиск (`/semantic`, `/clients/:id`), чат-режим (`/ask`).
 
 ## Branch state
