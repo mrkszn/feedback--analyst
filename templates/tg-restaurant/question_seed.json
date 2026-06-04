@@ -1,0 +1,44 @@
+[
+  {
+    "text": "Как вы оцениваете скорость обслуживания?",
+    "metric_key": "service_speed",
+    "expected_type": "enum",
+    "enum_values": ["быстро", "нормально", "медленно"]
+  },
+  {
+    "text": "Понравились ли вам блюда по вкусу?",
+    "metric_key": "food_taste",
+    "expected_type": "enum",
+    "enum_values": ["отлично", "нормально", "плохо"]
+  },
+  {
+    "text": "Насколько чисто было в зале?",
+    "metric_key": "cleanliness",
+    "expected_type": "enum",
+    "enum_values": ["чисто", "средне", "грязно"]
+  },
+  {
+    "text": "По шкале от 1 до 10, насколько вы готовы порекомендовать нас друзьям?",
+    "metric_key": "nps",
+    "expected_type": "number",
+    "enum_values": null
+  },
+  {
+    "text": "Был ли персонал вежлив и внимателен?",
+    "metric_key": "staff_friendliness",
+    "expected_type": "boolean",
+    "enum_values": null
+  },
+  {
+    "text": "Соответствовала ли цена качеству?",
+    "metric_key": "price_value",
+    "expected_type": "enum",
+    "enum_values": ["да, оправдано", "нейтрально", "дорого"]
+  },
+  {
+    "text": "Что бы вы хотели улучшить в нашем заведении?",
+    "metric_key": "improvement_wish",
+    "expected_type": "text",
+    "enum_values": null
+  }
+]

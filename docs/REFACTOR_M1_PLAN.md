@@ -9,6 +9,28 @@
 - **Hard break** на путях импорта (без backward-compat шимов)
 - **YAML** для конфигов
 
+## Phase progress
+
+- ✅ **R1 — Structural rename** — committed `fa62669` (137 files, +957/-489, 462 tests passing)
+- ✅ **R2 — StorageAdapter Protocol** — committed `64231ac` (17 files, +1179/-442, 462 tests passing). 3 ratified deviations: backward-compat `db: Client | None` parameter, `get_supabase` import retained as test patch-target, data-access Protocol granularity.
+- 🔄 **R3 — Template loader** — in flight (team `feat-m1-r3`)
+- ⏸  **R4 — Docs + tg-clinic** — pending
+
+**Live status:** see `STATUS.md` at repo root (updated by team-lead per change).
+
+## Coordination rules (mandatory for all M1 teams)
+
+Learned the hard way during R1/R2 — these are non-negotiable for R3 onward:
+
+1. **STATUS.md is the source of truth for curator visibility.** Update `STATUS.md` after every phase change, deviation, or open question. Do NOT spam curator with SendMessage status. Curator reads `STATUS.md`, not your inbox.
+2. **`pytest --collect-only` ≠ `pytest -q`.** Collect catches import errors only. Full run catches runtime errors (e.g., string-literal `patch("...")` targets pointing at deleted modules). Always run full `pytest -q` before claiming done.
+3. **Patch-target grep covers 4 call forms:** `patch("...")`, `patch.object("...", ...)`, `mocker.patch("...")`, `monkeypatch.setattr("...", ...)`. Import-grep alone misses these. Permanent gate must check all four.
+4. **Backward-compat retention is acceptable** when it preserves existing tests without massive fixture rewrites. Document trade-off in commit body as "ratified deviation".
+5. **Curator commits from main loop.** Subagents hit permission denial on `git commit`. Don't retry — escalate to curator via STATUS.md "Open questions" or single SendMessage.
+6. **Idle notifications are normal, not blockers.** Do not react to teammate idle pings unless they impact your work.
+7. **Verify live task state before acting on stale assignments.** Stale "start work" messages can arrive after a task is completed by a different agent in the same team.
+8. **One implementer per file at a time.** When a phase touches the same module from multiple angles, serialize edits or split file ownership explicitly.
+
 ---
 
 ## Финальная структура (после R1)

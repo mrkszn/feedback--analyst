@@ -1,0 +1,15 @@
+# Example client instance — references the tg-restaurant template with no
+# overrides. Copy this directory to clients/<your-name>/ to onboard a real
+# client, fill in clients/<your-name>/.env, and add an `overrides:` block to
+# customize any field from the template config.
+#
+# See docs/ONBOARDING_CLIENT.md for the full flow.
+
+template: tg-restaurant
+name: "Example Restaurant"
+
+# overrides:
+#   branding:
+#     bot_name: "Example Bot"
+#   prompts:
+#     dialogue: overrides/prompts/dialogue.txt

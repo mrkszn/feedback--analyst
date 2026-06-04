@@ -1,0 +1,31 @@
+name: "Telegram Restaurant Feedback"
+version: "1.0"
+
+channels:
+  - id: telegram_guest
+    token_env: TELEGRAM_GUEST_BOT_TOKEN
+
+presentations:
+  - id: telegram_admin
+    token_env: TELEGRAM_ADMIN_BOT_TOKEN
+  - id: http_api
+    port_env: API_PORT
+    cors_origins_env: ALLOWED_MINI_APP_ORIGINS
+
+storage:
+  primary:
+    type: supabase
+    url_env: SUPABASE_URL
+    key_env: SUPABASE_SERVICE_ROLE_KEY
+  vector:
+    type: pinecone
+    api_key_env: PINECONE_API_KEY
+    index_env: PINECONE_INDEX
+    namespace_env: PINECONE_NAMESPACE
+
+prompts:
+  dialogue: prompts/dialogue.txt
+  analyze: prompts/analyze.txt
+  card: prompts/card.txt
+
+question_seed: question_seed.json
