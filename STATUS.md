@@ -3,7 +3,7 @@
 > Live-обновляемый статус-файл. Куратор читает СЮДА, не в SendMessage-поток.
 > Все агенты команды обязаны обновлять соответствующий раздел при изменении состояния.
 
-**Last update:** 2026-06-04 11:20 UTC
+**Last update:** 2026-06-04 12:16 UTC
 
 ---
 
@@ -13,8 +13,8 @@
 |---|---|---|---|---|---|---|
 | R1: layered structure | ✅ committed | `fa62669` | ~45 мин | 137 | +957 / -489 | 462 |
 | R2: StorageAdapter Protocol | ✅ committed | `64231ac` | ~25 мин | 17 | +1179 / -442 | 462 |
-| **R3: template loader + tg-restaurant** | 🟢 gate green, READY TO COMMIT | (awaiting curator) | — | 16 (14 new + pyproject/uv.lock) | — | 475 |
-| R4: docs + tg-clinic stub | ⏸ pending | — | — | — | — | — |
+| R3: template loader + tg-restaurant | ✅ committed | `6c20b70` | ~85 мин | 18 (15 new + pyproject/uv.lock/plan+status) | +746 / -0 | 475 |
+| **R4: docs + tg-clinic stub** | 🟢 gate green, READY TO COMMIT | (awaiting curator) | — | 8 (3 docs + README + tg-clinic ×4 files) | — | 475 |
 
 **Gate baseline (main = `64231ac`):**
 - pytest -q → 462 passed
@@ -24,48 +24,41 @@
 
 ---
 
-## R3 — current focus
+## R4 — current focus
 
-**Goal:** template loader + извлечение текущего setup как `templates/tg-restaurant/` + `clients/_example/` config.
+**Goal:** finalize M1 — architecture docs + onboarding/template-authoring guides + `tg-clinic` template stub (extraction proof) + root README. Pure docs + one template stub; no production-code changes, no new tests.
 
-### Sub-tasks (live — grouped into 4 TaskCreate'ов)
+### Sub-tasks (live — 5 TaskCreate'ов)
 
-Task IDs in team task list; ⏳ = in_progress, ⛔ = blocked (waiting on dep), ✅ = done.
+Task IDs in team task list; ⏳ = in_progress, ⛔ = blocked, ✅ = done.
 
-- [x] ✅ **Task #1 → implementer** — bootstrap package DONE: `core/bootstrap/{__init__,loader,context,__main__,registry}.py`. `load_client(client_dir) -> AppContext`; run() reuses existing entry-point main()s. registry.py = channel→main() lookup (reviewer to confirm not over-engineered).
-- [x] ✅ **Task #2 → implementer** — `templates/tg-restaurant/` DONE: config.yaml + prompts/{dialogue,analyze,card}.txt (files-only extraction, prompts.py NOT rewired) + question_seed.json + README.
-- [x] ✅ **Task #3 → implementer** — `clients/_example/` DONE: config.yaml + .env.example.
-- [x] ✅ **Task #4 → tester** (DONE — gate GREEN post-#5; secret-free smoke passes) — validation gate.
-- [x] ✅ **Task #5 → implementer** — load_client secret-free (factory-based lazy adapters). Verified by team-lead (runtime, empty creds → no raise).
+- [x] ✅ **R4 #1 → implementer** — `docs/ARCHITECTURE.md` DONE (layer diagram verified vs tree, what-changes table, R2 storage boundary, data flow, module inventory, R3 bootstrap flow, commit links, sibling-doc cross-links).
+- [x] ✅ **R4 #2 → implementer** — `docs/ONBOARDING_CLIENT.md` + `docs/TEMPLATE_AUTHORING.md` DONE. _example forward-ref now satisfied.
+- [x] ✅ **R4 #3 → implementer** — `templates/tg-clinic/` DONE: config.yaml (schema byte-identical to tg-restaurant) + prompts/{dialogue,analyze,card}.txt (clinic tone: calm, tactful, privacy-aware; placeholder kept as `{restaurant_context}` VERBATIM — final decision: forward-compatible with the post-R4 live-override builder, which fills `{restaurant_context}`; a rename would silently break that future fill) + question_seed.json (7 clinic Qs: wait_time, staff_attentiveness, cleanliness, explanation_clarity, nps, price_value, improvement_wish) + README. Implementer self-proved secret-free bootstrap load.
+- [x] ✅ **R4 #4 → implementer** — root `README.md` DONE (created; M1 modular-architecture section + doc links).
+- [x] ✅ **R4 #5 → tester** (DONE — gate GREEN) — validation gate. Placeholder diffs = informational. Extraction proof via TMP DIR. pytest stayed 475.
 
-**Implementer self-reported gate (pre-tester):** 462 passed, ruff/format/mypy clean, 14 files. Tester re-verifies independently.
+**Implementer self-gate (pre-tester):** pytest 475 passed (unchanged — docs/templates only), ruff clean, mypy 146 clean.
 
-**Tester independent gate — FINAL (2026-06-04, post-#5, ALL GREEN):**
-- `tests/test_bootstrap_loader.py` — **13 tests pass**. Realigned 3 to the new factory contract (build_storage/vector return the adapter class; AppContext.storage/vector None pre-run, storage_factory/vector_factory hold the classes) + added `test_load_client_is_secret_free` (monkeypatch settings creds to '', assert load returns AppContext, storage None — regression lock for the #5 blocker).
-- 🟢 **secret-free smoke PASSES** — `SUPABASE_URL='' SUPABASE_SERVICE_ROLE_KEY='' PINECONE_API_KEY=''` → `load_client(clients/_example)` returns AppContext, storage=None, storage_factory=SupabaseStorage, vector_factory=PineconeVectorStore, NO raise.
-- `uv run pytest -q` → **475 passed** (462 baseline + 13 bootstrap), 1 pre-existing JWT warning, no regressions.
-- `uv run ruff check .` → All checks passed. `uv run ruff format --check .` → 146 files formatted. `uv run mypy .` → Success, 146 source files.
-- Backward-compat entry points (guest_bot / telegram_admin / http_api `__main__`) still import OK after the #5 context.py/loader.py change.
-- question_seed.json → valid JSON, 7 entries, all have text/metric_key/expected_type; 4 enum entries carry non-empty enum_values (create_question-compatible).
-- CLI `python -m core.bootstrap <bogus-dir>` → fails loud (FileNotFoundError, reaches load_client). ✓
-- **Gate verdict: GREEN. #4 completed. R3 ready to commit.**
+**Tester independent gate — R4 FINAL (2026-06-04, ALL GREEN):**
+- All 10 deliverables exist + non-empty: docs/ARCHITECTURE.md (9.1k), ONBOARDING_CLIENT.md (4.0k), TEMPLATE_AUTHORING.md (5.3k), README.md (2.7k), templates/tg-clinic/{config.yaml, prompts/{dialogue,analyze,card}.txt, question_seed.json, README.md}.
+- tg-clinic integrity: config top-level keys IDENTICAL to tg-restaurant (channels, name, presentations, prompts, question_seed, storage, version). question_seed.json valid JSON, 7 entries (wait_time, staff_attentiveness, cleanliness, explanation_clarity, nps, price_value, improvement_wish), all have text/metric_key/expected_type; 4 enum entries carry non-empty enum_values.
+- 🟢 EXTRACTION PROOF: tmp-dir client (`template: tg-clinic`, no repo footprint) + empty creds → `load_client` returns AppContext, template_dir=tg-clinic, storage=None, channels/presentations populated. Proves R3 bootstrap extracts to a 2nd industry template. tmp cleaned up.
+- Placeholder check (INFORMATIONAL): tg-clinic prompts use `{restaurant_context}` (implementer kept verbatim) — same token as tg-restaurant, braces balanced, no typo-tokens. Cosmetically odd name in a clinic template but harmless (prompts not live-loaded, R3 files-only). Not a blocker.
+- Regression: `uv run pytest -q` → **475 passed** (exactly unchanged — docs-only phase added no tests), 1 pre-existing JWT warning. `uv run ruff check .` → clean. `uv run mypy .` → Success 146 files (unchanged → no .py added). `uv run ruff format --check .` → 146 files formatted.
+- Markdown link sanity: all relative links across the 5 new docs resolve to existing files. ✓
+- 🧹 Did NOT touch stray untracked `clients/_smoke_clinic/` and did not depend on it — used my own tmp dir.
+- **Gate verdict: GREEN. #10 completed. R4 ready to commit (exclude clients/_smoke_clinic/ from the commit).**
+- **Team-lead re-verified independently from main loop (12:16):** tg-clinic extraction proof OK (tmp client, empty creds → AppContext), pytest 475 passed, ruff clean, mypy 146 clean, question_seed 7 valid entries, `in_memory` adapter cited in ARCHITECTURE.md confirmed real. Matches tester numbers exactly.
 
-### Commit plan for curator (R3 — 2 commits per plan, or 1 atomic)
+### Commit plan for curator (R4 — ONE atomic commit per plan)
+- Stage: `docs/ARCHITECTURE.md`, `docs/ONBOARDING_CLIENT.md`, `docs/TEMPLATE_AUTHORING.md`, `README.md`, `templates/tg-clinic/` (config.yaml + prompts/{dialogue,analyze,card}.txt + question_seed.json + README.md).
+- msg: `docs(architecture): R4 — M1 architecture docs + tg-clinic template stub`
+- ⚠️ EXCLUDE stray untracked `clients/_smoke_clinic/` (don't `git add`, or delete). STATUS.md + docs/REFACTOR_M1_PLAN.md = process docs — curator's call whether to fold into this commit.
 
-Per REFACTOR_M1_PLAN.md R3 acceptance #7, R3 may be 1 or 2 commits. Suggested split:
+🧹 **CLEANUP for curator (R4 commit):** implementer left a stray untracked `clients/_smoke_clinic/config.yaml` (throwaway used to prove tg-clinic loads). It is NOT an R4 deliverable. Both implementer and team-lead hit permission-denial on `rm` (deletion needs main-loop approval). **Action: curator delete `clients/_smoke_clinic/` OR simply don't `git add` it** (it's untracked, so excluding it keeps the R4 commit clean). Real R4 deliverable in clients/ = none; only docs/ + templates/tg-clinic/ + README.md.
 
-**Commit A — bootstrap fundament + dep:**
-- `pyproject.toml`, `uv.lock` (pyyaml>=6.0.3)
-- `core/bootstrap/{__init__,loader,context,registry,__main__}.py`
-- `tests/test_bootstrap_loader.py`
-- msg: `refactor(bootstrap): R3 — template loader + config schema + secret-free AppContext`
-
-**Commit B — template + example client extraction:**
-- `templates/tg-restaurant/{config.yaml,README.md,question_seed.json,prompts/*.txt}`
-- `clients/_example/{config.yaml,.env.example}`
-- msg: `refactor(bootstrap): R3 — extract tg-restaurant template + _example client`
-
-(Or one atomic commit covering all 16 files — curator's call.) NOTE: `clients/` is currently untracked and NOT gitignored — `clients/_example/` will be tracked as intended (the committed reference); future real client dirs would be gitignored separately. STATUS.md + docs/REFACTOR_M1_PLAN.md are process docs — curator decides whether to include in the R3 commit or keep separate.
+**R3 archived (committed `6c20b70`):** bootstrap package + tg-restaurant template + _example client + secret-free loader fix (#5). Final gate 475 passed, ruff/format/mypy clean. One blocker found+fixed (eager SupabaseStorage → factory-based lazy adapters). Detail in git history + "Open questions" ratifications below.
 
 ---
 
@@ -81,6 +74,10 @@ Per REFACTOR_M1_PLAN.md R3 acceptance #7, R3 may be 1 or 2 commits. Suggested sp
 
 ## Recent events (newest first)
 
+- 2026-06-04 12:16 — team-lead: R4 GATE GREEN. Tester #10 completed + team-lead re-verified from main loop (tg-clinic extraction proof, 475 passed, ruff/mypy clean). All 5 R4 tasks done. Commit plan posted. Sent curator sign-off. **R4 ready to commit (1 atomic, exclude _smoke_clinic).** After commit → final review + team closure.
+- 2026-06-04 12:02 — team-lead: ALL R4 implementer tasks (#6-#9) done, self-gate green (475 passed, ruff/mypy clean). Dispatching tester for #10 gate. 🧹 Flagged stray untracked `clients/_smoke_clinic/` for curator cleanup (rm denied to subagents; exclude from commit or delete).
+- 2026-06-04 11:50 — team-lead: R4 #6 (ARCHITECTURE.md) + #7 (ONBOARDING + TEMPLATE_AUTHORING) done, grounded in real tree/code. #8 (tg-clinic) in progress, #9 (README) next. Corrected #8: {clinic_context} rename OK (template .txt not live-loaded — grep core/agent/ = 0 refs). Extraction proof = tmp-dir, no committed _example_clinic.
+- 2026-06-04 11:35 — team-lead: R3 committed `6c20b70` (curator). **GO R4.** 5 tasks created (4 docs/template → impl, 1 gate → tester). R4 = pure docs + tg-clinic stub, no prod-code/test changes. Dispatching implementer.
 - 2026-06-04 11:20 — team-lead: R3 GATE GREEN. Re-verified independently from main loop: secret-free smoke OK, pytest 475 passed, ruff/format/mypy all clean. All 5 tasks completed. Sent curator sign-off. **R3 ready to commit (curator commits from main loop).**
 - 2026-06-04 11:08 — team-lead: #5 fix VERIFIED (loader.py factories + AppContext init=False adapters; runtime empty-creds load → no raise). Blocker cleared. Handed tester 3 stale-contract test realigns (their zone) + re-run gate. R3 commit unblocks once #4 flips green.
 - 2026-06-04 10:52 — team-lead REVIEW: read bootstrap package. registry.py = KEEP (not over-engineered). Found 🔴 BLOCKER — load_client eagerly builds SupabaseStorage → requires SUPABASE creds at load (verified: SupabaseException on empty creds). Violates acceptance #5 (load must be secret-free). Local pass is a false-green from .env. Sent fix to implementer (lazy adapter construction); held R3 commit + warned tester.

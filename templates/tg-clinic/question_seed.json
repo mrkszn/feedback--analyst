@@ -1,0 +1,44 @@
+[
+  {
+    "text": "Долго ли вам пришлось ждать приёма?",
+    "metric_key": "wait_time",
+    "expected_type": "enum",
+    "enum_values": ["без ожидания", "немного", "долго"]
+  },
+  {
+    "text": "Был ли персонал внимателен и тактичен?",
+    "metric_key": "staff_attentiveness",
+    "expected_type": "enum",
+    "enum_values": ["очень", "нормально", "нет"]
+  },
+  {
+    "text": "Насколько чисто и комфортно было в помещении?",
+    "metric_key": "cleanliness",
+    "expected_type": "enum",
+    "enum_values": ["чисто", "средне", "грязно"]
+  },
+  {
+    "text": "Понятно ли вам объяснили процедуру и рекомендации?",
+    "metric_key": "explanation_clarity",
+    "expected_type": "boolean",
+    "enum_values": null
+  },
+  {
+    "text": "По шкале от 1 до 10, насколько вы готовы порекомендовать нас?",
+    "metric_key": "nps",
+    "expected_type": "number",
+    "enum_values": null
+  },
+  {
+    "text": "Соответствовала ли стоимость вашим ожиданиям?",
+    "metric_key": "price_value",
+    "expected_type": "enum",
+    "enum_values": ["да, оправдано", "нейтрально", "дорого"]
+  },
+  {
+    "text": "Что бы вы хотели улучшить в нашем сервисе?",
+    "metric_key": "improvement_wish",
+    "expected_type": "text",
+    "enum_values": null
+  }
+]
