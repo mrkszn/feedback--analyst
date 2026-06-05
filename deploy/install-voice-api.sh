@@ -68,13 +68,24 @@ SUDO
 chmod 0440 "${SUDOERS_FILE}"
 visudo -c -f "${SUDOERS_FILE}" >/dev/null
 
-echo "[4/7] firewall — block external access to ${HOST_PORT} (only Caddy reaches it)"
+echo "[4/7] firewall — clean up any prior over-broad deny on ${HOST_PORT}"
+# We do NOT add a blanket 'ufw deny 8200/tcp' here: ufw is interface-agnostic
+# by default and would also block traffic from the docker bridge, killing
+# Caddy → voice-api. The API has JWT + Telegram-initData auth, so leaving
+# 8200 reachable on the public IP is acceptable. If you want true bridge-only
+# access, add a rule scoped to the docker bridge interface manually:
+#     ufw allow in on docker0 to any port 8200
+#     ufw deny  in on eth0    to any port 8200
+# (Replace docker0 with the actual bridge — `ip route show` or `docker network ls`.)
 if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
-  ufw deny "${HOST_PORT}/tcp" >/dev/null || true
-  echo "    ufw: deny ${HOST_PORT}/tcp"
+  if ufw status numbered 2>/dev/null | grep -q "DENY.*${HOST_PORT}/tcp"; then
+    yes | ufw delete deny "${HOST_PORT}/tcp" >/dev/null 2>&1 || true
+    echo "    removed prior 'deny ${HOST_PORT}/tcp' (was blocking docker bridge too)"
+  else
+    echo "    ufw active, no rule for ${HOST_PORT} — fine"
+  fi
 else
-  echo "    ufw inactive or missing — port ${HOST_PORT} stays publicly reachable on the IP"
-  echo "    (FastAPI has its own auth, but install ufw if you want hygiene)"
+  echo "    ufw inactive — nothing to do"
 fi
 
 echo "[5/7] start voice-api"
