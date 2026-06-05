@@ -68,24 +68,29 @@ SUDO
 chmod 0440 "${SUDOERS_FILE}"
 visudo -c -f "${SUDOERS_FILE}" >/dev/null
 
-echo "[4/7] firewall — clean up any prior over-broad deny on ${HOST_PORT}"
-# We do NOT add a blanket 'ufw deny 8200/tcp' here: ufw is interface-agnostic
-# by default and would also block traffic from the docker bridge, killing
-# Caddy → voice-api. The API has JWT + Telegram-initData auth, so leaving
-# 8200 reachable on the public IP is acceptable. If you want true bridge-only
-# access, add a rule scoped to the docker bridge interface manually:
-#     ufw allow in on docker0 to any port 8200
-#     ufw deny  in on eth0    to any port 8200
-# (Replace docker0 with the actual bridge — `ip route show` or `docker network ls`.)
+echo "[4/7] firewall — allow Caddy (any docker bridge) to reach :${HOST_PORT}"
+# ufw default-deny-incoming on this VPS means any traffic from the docker
+# bridge gateways (172.16-172.31) to host:${HOST_PORT} is dropped unless
+# explicitly allowed. Caddy lives in n8n's compose stack and reaches us
+# via its own bridge gateway (e.g. 172.20.0.1) → we need an allow rule
+# for the whole 172.16.0.0/12 range (covers all docker bridges).
+#
+# We also remove any prior over-broad 'deny ${HOST_PORT}/tcp' from older
+# install runs of this script.
 if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
   if ufw status numbered 2>/dev/null | grep -q "DENY.*${HOST_PORT}/tcp"; then
     yes | ufw delete deny "${HOST_PORT}/tcp" >/dev/null 2>&1 || true
-    echo "    removed prior 'deny ${HOST_PORT}/tcp' (was blocking docker bridge too)"
+    echo "    removed prior over-broad 'deny ${HOST_PORT}/tcp'"
+  fi
+  if ufw status 2>/dev/null | grep -qE "${HOST_PORT}/tcp.*172\.16\.0\.0/12"; then
+    echo "    ufw: allow from 172.16.0.0/12 to :${HOST_PORT}/tcp — already present"
   else
-    echo "    ufw active, no rule for ${HOST_PORT} — fine"
+    ufw allow in from 172.16.0.0/12 to any port "${HOST_PORT}" proto tcp \
+        comment "voice-api from docker bridges" >/dev/null
+    echo "    ufw: allow from 172.16.0.0/12 to :${HOST_PORT}/tcp (covers all docker bridges)"
   fi
 else
-  echo "    ufw inactive — nothing to do"
+  echo "    ufw inactive — nothing to do (host firewall not enforcing)"
 fi
 
 echo "[5/7] start voice-api"
@@ -130,16 +135,37 @@ for i in $(seq 1 30); do
 done
 
 echo "[6/7] register the Caddy vhost (idempotent)"
+# We do NOT use 'host.docker.internal' here because Docker's host-gateway
+# semantic resolves to docker0's gateway (172.17.0.1) regardless of which
+# bridge Caddy actually runs on. If docker0 is down (no containers
+# attached) — and on this multi-stack VPS it is — packets to that IP just
+# time out. Instead, ask the Caddy container what its OWN default gateway
+# is and pin reverse_proxy to that IP. Robust across container/bridge
+# recreations.
+CADDY_GW=$(docker exec n8n-caddy-1 sh -c 'ip route show default 2>/dev/null' | awk '/default/ {print $3}' || true)
+if [[ -z "${CADDY_GW}" ]]; then
+  echo "    could not read Caddy default gateway — abort"
+  exit 1
+fi
+echo "    Caddy default gateway: ${CADDY_GW}"
+
+UPSTREAM="${CADDY_GW}:${HOST_PORT}"
 if grep -qF "${HOSTNAME}" "${CADDYFILE}"; then
-  echo "    ${HOSTNAME} block already in Caddyfile — skipping append"
+  # Block already there. Make sure upstream IP still points at the live
+  # Caddy gateway (could have shifted after a stack rebuild).
+  if grep -A2 "${HOSTNAME}" "${CADDYFILE}" | grep -q "reverse_proxy ${UPSTREAM}"; then
+    echo "    ${HOSTNAME} block present + upstream up-to-date — skipping"
+  else
+    cp "${CADDYFILE}" "${CADDYFILE}.bak.$(date -u +%Y%m%d%H%M%S)"
+    sed -i "/^${HOSTNAME//./\\.} {/,/^}/ s|reverse_proxy [^[:space:]]*|reverse_proxy ${UPSTREAM}|" "${CADDYFILE}"
+    echo "    refreshed reverse_proxy → ${UPSTREAM} in existing ${HOSTNAME} block"
+  fi
 else
   cp "${CADDYFILE}" "${CADDYFILE}.bak.$(date -u +%Y%m%d%H%M%S)"
-  # Double-quoted heredoc so ${HOSTNAME} expands. The CSP single-quotes around
-  # 'self' are inside a double-quoted string in Caddy syntax — no shell parse.
   cat >> "${CADDYFILE}" <<CADDY
 
 ${HOSTNAME} {
-    reverse_proxy host.docker.internal:8200
+    reverse_proxy ${UPSTREAM}
 
     encode gzip
 
@@ -149,7 +175,7 @@ ${HOSTNAME} {
     }
 }
 CADDY
-  echo "    appended ${HOSTNAME} block to ${CADDYFILE}"
+  echo "    appended ${HOSTNAME} → ${UPSTREAM} to ${CADDYFILE}"
 fi
 
 echo "[7/7] reload Caddy (no container restart)"
