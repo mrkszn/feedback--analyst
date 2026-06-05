@@ -120,7 +120,7 @@ async def admin_handle_voice_count(message: Message, state: FSMContext) -> None:
         return
     await state.update_data(voice_count=n)
     await state.set_state(AdminFlow.AWAITING_QUESTION_VOICE)
-    await message.answer("Запишите голосовое: о чём хотите спрашивать гостей?")
+    await message.answer("Запишите голосовое: о чём хотите спрашивать клиентов после доставки?")
 
 
 # --------------------------------------------------------------------------- #

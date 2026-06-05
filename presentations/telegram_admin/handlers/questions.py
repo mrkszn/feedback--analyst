@@ -275,7 +275,7 @@ async def admin_question_delete_all_confirm(callback: CallbackQuery) -> None:
     )
     if isinstance(callback.message, Message):
         await callback.message.answer(
-            "Удалить ВСЕ активные вопросы? Это скроет их у гостей (история сохранится).",
+            "Удалить ВСЕ активные вопросы? Это скроет их у клиентов (история сохранится).",
             reply_markup=kb,
         )
     await callback.answer()

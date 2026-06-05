@@ -1,7 +1,7 @@
 """Single-question LLM helper for the admin /add_question dialog mode.
 
-Takes a natural-language description from the admin ("задавай гостям вопрос,
-понравилось ли им как готовят") and turns it into a single structured
+Takes a natural-language description from the admin ("задавай клиентам вопрос,
+понравилось ли им, как доехала еда") and turns it into a single structured
 `QuestionDraft` ready for `create_question`. Distinct from
 `synthesize_questions` which produces a list from a voice transcript — here
 the admin describes ONE question at a time in a chat.
@@ -14,10 +14,13 @@ from core.agent.nodes.synthesize_questions import QuestionDraft, _normalize_draf
 from core.integrations.openai_chat import chat_completion
 
 ADMIN_ASSISTANT_SYSTEM = (
-    "Ты — помощник владельца ресторана. Админ описал в свободной форме ОДИН вопрос, "
-    "который хочет задавать гостям. Преобразуй описание в один структурированный "
-    "QuestionDraft.\n\n"
-    "Контекст ресторана:\n{restaurant_context}\n\n"
+    "Ты — помощник владельца сервиса доставки еды. Админ описал в свободной форме ОДИН "
+    "вопрос, который хочет задавать клиентам после доставки. Преобразуй описание в один "
+    "структурированный QuestionDraft.\n\n"
+    "Контекст бизнеса:\n{restaurant_context}\n\n"
+    "Помни про две части клиентского опыта: еда (вкус, температура, упаковка) и "
+    "доставка (скорость, курьер). Если описание явно про одну сторону — не подменяй "
+    "формулировку другой.\n\n"
     "Выбери expected_type по эвристике:\n"
     "- number — оценка 1..5 («оцените», «насколько», «по шкале»);\n"
     "- boolean — да/нет («понравилось ли», «хватило ли», «было ли»);\n"

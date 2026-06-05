@@ -10,7 +10,7 @@ from core.integrations.openai_chat import chat_completion
 class DialogueTurn(BaseModel):
     bot_reply: str = Field(
         ...,
-        description="Живой эмпатичный ответ гостю, 1-3 предложения, эмодзи (не >2 на сообщение). Не вопросительная анкета.",
+        description="Живой эмпатичный ответ клиенту, 1-3 предложения, эмодзи (не >2 на сообщение). Не вопросительная анкета.",
     )
     transition: Literal["continue", "offer_survey"]
     insights: dict[str, str] = Field(default_factory=dict)
@@ -22,7 +22,7 @@ def _format_history(history: list[dict[str, str]]) -> str:
     lines: list[str] = []
     for msg in history:
         role = msg.get("role", "user")
-        speaker = "Гость" if role == "user" else "Бот"
+        speaker = "Клиент" if role == "user" else "Бот"
         lines.append(f"{speaker}: {msg.get('content', '')}")
     return "\n".join(lines)
 
@@ -37,7 +37,7 @@ async def continue_dialogue(
 ) -> DialogueTurn:
     prompt = build_dialogue_prompt()
     lc_messages = prompt.format_messages(
-        restaurant_context=restaurant_context or "(контекст ресторана не задан)",
+        restaurant_context=restaurant_context or "(контекст сервиса доставки не задан)",
         feedback_summary=feedback_summary,
         history=_format_history(history),
         turn_count=turn_count,

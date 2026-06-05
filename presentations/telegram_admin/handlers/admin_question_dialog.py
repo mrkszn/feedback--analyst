@@ -3,8 +3,8 @@
 Flow:
 1. Admin clicks [💬 В диалоге] on the /add_question picker → state set to
    AWAITING_NL_DESCRIPTION.
-2. Admin types a natural description ("спрашивай гостей, понравилось ли
-   как готовят").
+2. Admin types a natural description ("спрашивай клиентов, понравилось
+   ли, как доехала еда").
 3. `draft_question_from_nl` returns a single QuestionDraft. We show it
    with [✅ Создать] [✏️ Поправить] [✖️ Отмена].
 4. "Создать" → create_question + confirmation.

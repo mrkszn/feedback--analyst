@@ -1,4 +1,4 @@
-"""Inline keyboards для типизированных вопросов гостю.
+"""Inline keyboards для типизированных вопросов клиенту.
 
 Каждый вопрос из пула может иметь ``expected_type`` ∈ {boolean, number, enum, text}.
 Для типизированных (boolean/number/enum) рендерим компактную inline-клавиатуру;
