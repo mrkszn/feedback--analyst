@@ -153,8 +153,14 @@ async def guest_feedback_text(message: Message, state: FSMContext) -> None:
     await _process_feedback(message, state, raw_text=text, source="text")
 
 
-@router.message(GuestFlow.AWAITING_FEEDBACK, F.voice)
-async def guest_feedback_voice(message: Message, state: FSMContext) -> None:
+async def process_voice_message(message: Message, state: FSMContext) -> None:
+    """Download a Telegram voice note → Whisper → _process_feedback.
+
+    Extracted so the no-state catch-all in handlers/start.py can reuse the
+    same pipeline when a brand-new user sends a voice as their very first
+    message (without /start) — we then auto-greet AND process the voice
+    in a single turn.
+    """
     voice = message.voice
     bot = message.bot
     if voice is None or bot is None:
@@ -172,6 +178,11 @@ async def guest_feedback_voice(message: Message, state: FSMContext) -> None:
         await message.answer("Не удалось разобрать голос. Можете отправить текстом?")
         return
     await _process_feedback(message, state, raw_text=text, source="voice")
+
+
+@router.message(GuestFlow.AWAITING_FEEDBACK, F.voice)
+async def guest_feedback_voice(message: Message, state: FSMContext) -> None:
+    await process_voice_message(message, state)
 
 
 @router.message(GuestFlow.IN_INTERVIEW, Command("skip"))

@@ -13,6 +13,34 @@ GUEST_COMMANDS: list[BotCommand] = [
     BotCommand(command="cancel", description="Отменить и завершить диалог"),
 ]
 
+# Shown on the bot's profile page BEFORE the user taps Start — Telegram
+# uses set_my_description for that. Visible to the user as soon as the
+# chat opens. Kept short and warm.
+GUEST_DESCRIPTION = (
+    "Привет! 👋 Расскажи в одном сообщении (голосом или текстом), как тебе "
+    "было у нас сегодня — это правда помогает, владелец читает каждый отзыв."
+)
+
+# Shown in Telegram search results and the «What can this bot do?» card.
+# Hard cap 120 chars per Telegram API.
+GUEST_SHORT_DESCRIPTION = "Оставь короткий отзыв — голосом или текстом. Минута, и владелец прочтёт."
+
+
+async def _publish_profile(bot: Bot) -> None:
+    """Push description + short description to Telegram once per startup.
+
+    Telegram silently swallows set_my_description if the value is unchanged
+    so it's cheap to call on every boot — keeps the profile in lockstep
+    with what's in the repo.
+    """
+    try:
+        await bot.set_my_description(description=GUEST_DESCRIPTION)
+        await bot.set_my_short_description(short_description=GUEST_SHORT_DESCRIPTION)
+    except Exception:
+        # Telegram rejects descriptions only on bad token / rate limit. We
+        # don't want a profile-publish hiccup to take the bot down.
+        logging.exception("Failed to publish guest-bot profile description")
+
 
 async def main() -> None:
     logging.basicConfig(level=settings.log_level)
@@ -21,6 +49,7 @@ async def main() -> None:
 
     bot = Bot(token=settings.telegram_guest_bot_token)
     await bot.set_my_commands(GUEST_COMMANDS)
+    await _publish_profile(bot)
     dp = Dispatcher(storage=MemoryStorage())
     dp.include_router(start.router)
     dp.include_router(feedback.router)
