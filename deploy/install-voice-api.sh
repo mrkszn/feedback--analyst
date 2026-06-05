@@ -81,22 +81,36 @@ echo "[5/7] start voice-api"
 systemctl daemon-reload
 systemctl enable voice-api.service
 systemctl restart bot-guest.service bot-admin.service voice-api.service
-sleep 3
+
+# Poll up to ~30s for each unit to settle. Uvicorn cold-start under systemd
+# can take ~5-10s on a cold VPS (loading Pinecone client, OpenAI SDK, etc.),
+# so a flat sleep 3 + is-active was racing the activating state.
 for svc in bot-guest bot-admin voice-api; do
-  if systemctl is-active --quiet "${svc}.service"; then
-    echo "    ${svc}: active"
-  else
-    echo "    ${svc}: $(systemctl is-active ${svc}.service) — check 'journalctl -u ${svc}'"
-    exit 1
-  fi
+  for i in $(seq 1 15); do
+    state=$(systemctl is-active "${svc}.service" 2>&1 || true)
+    case "${state}" in
+      active)   echo "    ${svc}: active (${i}s)"; break ;;
+      failed)   echo "    ${svc}: failed — check 'journalctl -u ${svc}' and 'tail /var/log/telegram-waiter/${svc}.log'"; exit 1 ;;
+    esac
+    sleep 2
+    if [[ "${i}" == "15" ]]; then
+      echo "    ${svc}: still ${state} after 30s — check 'journalctl -u ${svc}' and 'tail /var/log/telegram-waiter/${svc}.log'"
+      exit 1
+    fi
+  done
 done
 
-# Smoke test: voice-api reachable on docker0 gateway from caddy network?
-# Locally just check that the host listens on 0.0.0.0:8200.
+# Local smoke: uvicorn listening on 0.0.0.0:8200?
 if ss -tln | grep -q ':8200 '; then
   echo "    voice-api: 0.0.0.0:8200 listening"
 else
   echo "    voice-api not listening on 8200 — abort"
+  exit 1
+fi
+if curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8200/docs | grep -q '^200$'; then
+  echo "    voice-api: GET /docs returns 200 locally"
+else
+  echo "    voice-api: GET /docs not 200 locally — check uvicorn log"
   exit 1
 fi
 
