@@ -17,13 +17,16 @@ GUEST_COMMANDS: list[BotCommand] = [
 # uses set_my_description for that. Visible to the user as soon as the
 # chat opens. Kept short and warm.
 GUEST_DESCRIPTION = (
-    "Привет! 👋 Расскажи в одном сообщении (голосом или текстом), как тебе "
-    "было у нас сегодня — это правда помогает, владелец читает каждый отзыв."
+    "Привет! 👋 Расскажи в одном сообщении (голосом или текстом), как прошёл "
+    "твой заказ и доставка — что понравилось, а что нет. Это правда помогает: "
+    "владелец читает каждый отзыв."
 )
 
 # Shown in Telegram search results and the «What can this bot do?» card.
 # Hard cap 120 chars per Telegram API.
-GUEST_SHORT_DESCRIPTION = "Оставь короткий отзыв — голосом или текстом. Минута, и владелец прочтёт."
+GUEST_SHORT_DESCRIPTION = (
+    "Поделись впечатлением от доставки — голосом или текстом. Минута, и владелец прочтёт."
+)
 
 
 async def _publish_profile(bot: Bot) -> None:

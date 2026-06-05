@@ -9,7 +9,7 @@ from core.services.clients import create_or_get_client
 router = Router(name="guest_start")
 
 
-WELCOME = "Привет! 👋 Расскажи, как тебе у нас сегодня? Можешь голосом или текстом — как удобнее."
+WELCOME = "Привет! 👋 Расскажи, как прошёл заказ и доставка — голосом или текстом, как удобнее."
 
 
 @router.message(CommandStart())
