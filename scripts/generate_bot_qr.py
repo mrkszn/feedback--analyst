@@ -79,7 +79,9 @@ def _make_qr_image(
     )
     qr.add_data(url)
     qr.make(fit=True)
-    img = qr.make_image(fill_color=fg, back_color=bg).convert("RGB")
+    # qrcode + Pillow expose loose `Any` typing on their wrappers; cast to
+    # Image so the call-site stays strongly typed for mypy.
+    img: Image.Image = qr.make_image(fill_color=fg, back_color=bg).convert("RGB")
     if size_px and img.size[0] != size_px:
         img = img.resize((size_px, size_px), Image.Resampling.NEAREST)
     return img
