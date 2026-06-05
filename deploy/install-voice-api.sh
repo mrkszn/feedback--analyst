@@ -100,19 +100,23 @@ for svc in bot-guest bot-admin voice-api; do
   done
 done
 
-# Local smoke: uvicorn listening on 0.0.0.0:8200?
-if ss -tln | grep -q ':8200 '; then
-  echo "    voice-api: 0.0.0.0:8200 listening"
-else
-  echo "    voice-api not listening on 8200 — abort"
-  exit 1
-fi
-if curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8200/docs | grep -q '^200$'; then
-  echo "    voice-api: GET /docs returns 200 locally"
-else
-  echo "    voice-api: GET /docs not 200 locally — check uvicorn log"
-  exit 1
-fi
+# Local smoke: uvicorn binds to :8200 only after importing the FastAPI app
+# (Pinecone + OpenAI SDK init), which can take ~10-15 s on a cold start.
+# is-active reports active as soon as the systemd process exists, NOT when
+# uvicorn is serving — so poll the actual port instead.
+echo "    waiting for uvicorn to bind :8200…"
+for i in $(seq 1 30); do
+  code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 2 http://127.0.0.1:8200/docs 2>/dev/null || echo "000")
+  if [[ "${code}" == "200" ]]; then
+    echo "    voice-api: GET /docs returns 200 locally (${i}s)"
+    break
+  fi
+  if [[ "${i}" == "30" ]]; then
+    echo "    voice-api: /docs still unreachable after 60s — check 'tail /var/log/telegram-waiter/voice-api.log'"
+    exit 1
+  fi
+  sleep 2
+done
 
 echo "[6/7] register the Caddy vhost (idempotent)"
 if grep -qF "${HOSTNAME}" "${CADDYFILE}"; then
