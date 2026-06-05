@@ -342,7 +342,7 @@ def compose_card(
     _draw_text_centred(draw, handle_text, y=y, font=handle_font, fill=theme.brand, canvas_w=W)
 
     # ─── dotted separator ─────────────────────────────────────
-    sep_y = H - pad - 130
+    sep_y = H - pad - 160
     n_dots = 28
     step = (W - 2 * pad - 100) // n_dots
     start_x = (W - step * n_dots) // 2
@@ -355,22 +355,28 @@ def compose_card(
 
     # ─── footer ───────────────────────────────────────────────
     body_font = _load_font(22)
-    footer_y = sep_y + 28
+    footer_y = sep_y + 30
     for line in cta_bottom.split("\n"):
         footer_y = (
-            _draw_text_centred(draw, line, y=footer_y, font=body_font, fill=theme.muted, canvas_w=W)
+            _draw_text_centred(draw, line, y=footer_y, font=body_font, fill=theme.ink_2, canvas_w=W)
             + 6
         )
 
-    tag_font = _load_font(20)
-    _draw_text_centred(
-        draw,
-        footer_tagline,
-        y=H - pad - 36,
-        font=tag_font,
-        fill=theme.muted,
-        canvas_w=W,
-    )
+    # Tagline: bumped from 20→24 px and darkened from `muted` to `ink_2`
+    # because at 20 px in muted grey the descender of "я" antialiased
+    # down to a single subpixel row — looked like "п" on phone-sized
+    # previews. Also wraps and gets 56 px of breathing room from the
+    # card's bottom edge so the descender never grazes the frame.
+    tag_font = _load_font(24)
+    tag_lines = _wrap_text(draw, footer_tagline, max_w=W - 2 * pad - 80, font=tag_font)
+    line_h = 30  # font 24 + ~6 px leading
+    block_h = line_h * len(tag_lines)
+    tag_top = H - pad - 56 - block_h
+    for line in tag_lines:
+        tag_top = (
+            _draw_text_centred(draw, line, y=tag_top, font=tag_font, fill=theme.ink_2, canvas_w=W)
+            + 6
+        )
 
     return card
 
@@ -409,7 +415,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--tagline",
-        default="Минута, и кухня с логистикой прочтут каждое слово.",
+        default="Минута на отзыв — и команда доставки прочтёт каждое слово.",
         help="Bottom-most tagline.",
     )
     args = parser.parse_args()
