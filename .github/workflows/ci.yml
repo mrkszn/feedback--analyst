@@ -107,6 +107,17 @@ jobs:
              /usr/local/bin/uv sync --frozen
              sudo -n /usr/bin/systemctl restart bot-guest.service
              sudo -n /usr/bin/systemctl restart bot-admin.service
-             sleep 3
+             sudo -n /usr/bin/systemctl restart voice-api.service
+             # poll up to 30 s — voice-api binds 0.0.0.0:8200 only after
+             # importing the FastAPI app (Pinecone + OpenAI SDK init),
+             # which can race a flat sleep.
+             for _ in $(seq 1 15); do
+               sudo -n /usr/bin/systemctl is-active --quiet bot-guest.service \
+                 && sudo -n /usr/bin/systemctl is-active --quiet bot-admin.service \
+                 && sudo -n /usr/bin/systemctl is-active --quiet voice-api.service \
+                 && break
+               sleep 2
+             done
              sudo -n /usr/bin/systemctl is-active bot-guest.service
-             sudo -n /usr/bin/systemctl is-active bot-admin.service'
+             sudo -n /usr/bin/systemctl is-active bot-admin.service
+             sudo -n /usr/bin/systemctl is-active voice-api.service'
