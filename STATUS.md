@@ -1,108 +1,206 @@
-# STATUS — M1 Refactor
+# STATUS — telegram-waiter
 
-> Live-обновляемый статус-файл. Куратор читает СЮДА, не в SendMessage-поток.
-> Все агенты команды обязаны обновлять соответствующий раздел при изменении состояния.
+> Single source of truth для куратора. Где сейчас стоит проект, что задеплоено, что в работе.
 
-**Last update:** 2026-06-04 12:24 UTC — ✅ **M1 COMPLETE** (all 4 phases on main; team closing)
-
----
-
-## Phase progress
-
-| Фаза | Статус | SHA | Длительность | Файлов | +/- | Тестов |
-|---|---|---|---|---|---|---|
-| R1: layered structure | ✅ committed | `fa62669` | ~45 мин | 137 | +957 / -489 | 462 |
-| R2: StorageAdapter Protocol | ✅ committed | `64231ac` | ~25 мин | 17 | +1179 / -442 | 462 |
-| R3: template loader + tg-restaurant | ✅ committed | `6c20b70` | ~85 мин | 18 (15 new + pyproject/uv.lock/plan+status) | +746 / -0 | 475 |
-| R4: docs + tg-clinic stub | ✅ committed | `752c8aa` | — | 11 | +702 / -36 | 475 |
-
-**🎉 M1 REFACTOR COMPLETE** — R1 `fa62669` → R2 `64231ac` → R3 `6c20b70` → R4 `752c8aa`, all on main. 475 passing, ruff/mypy clean. Final review sweep skipped (curator decision: each phase had independent tester validation per checkpoint — extra read-only sweep = diminishing returns). Team `feat-m1-r3` closing.
-
-**Gate baseline (main = `64231ac`):**
-- pytest -q → 462 passed
-- ruff check → clean
-- ruff format → 140 files formatted
-- mypy → Success, 140 source files
+**Last update:** 2026-06-05 ~10:30 UTC
 
 ---
 
-## R4 — current focus
+## TL;DR
 
-**Goal:** finalize M1 — architecture docs + onboarding/template-authoring guides + `tg-clinic` template stub (extraction proof) + root README. Pure docs + one template stub; no production-code changes, no new tests.
+**MVP полностью в продакшене и работает.** Все фазы 0-4 (бэкенд, боты, HTTP API, Mini App template, Mini App instance) закрыты. Сейчас — пост-MVP полировка фронта + подготовка ко второй итерации.
 
-### Sub-tasks (live — 5 TaskCreate'ов)
-
-Task IDs in team task list; ⏳ = in_progress, ⛔ = blocked, ✅ = done.
-
-- [x] ✅ **R4 #1 → implementer** — `docs/ARCHITECTURE.md` DONE (layer diagram verified vs tree, what-changes table, R2 storage boundary, data flow, module inventory, R3 bootstrap flow, commit links, sibling-doc cross-links).
-- [x] ✅ **R4 #2 → implementer** — `docs/ONBOARDING_CLIENT.md` + `docs/TEMPLATE_AUTHORING.md` DONE. _example forward-ref now satisfied.
-- [x] ✅ **R4 #3 → implementer** — `templates/tg-clinic/` DONE: config.yaml (schema byte-identical to tg-restaurant) + prompts/{dialogue,analyze,card}.txt (clinic tone: calm, tactful, privacy-aware; placeholder kept as `{restaurant_context}` VERBATIM — final decision: forward-compatible with the post-R4 live-override builder, which fills `{restaurant_context}`; a rename would silently break that future fill) + question_seed.json (7 clinic Qs: wait_time, staff_attentiveness, cleanliness, explanation_clarity, nps, price_value, improvement_wish) + README. Implementer self-proved secret-free bootstrap load.
-- [x] ✅ **R4 #4 → implementer** — root `README.md` DONE (created; M1 modular-architecture section + doc links).
-- [x] ✅ **R4 #5 → tester** (DONE — gate GREEN) — validation gate. Placeholder diffs = informational. Extraction proof via TMP DIR. pytest stayed 475.
-
-**Implementer self-gate (pre-tester):** pytest 475 passed (unchanged — docs/templates only), ruff clean, mypy 146 clean.
-
-**Tester independent gate — R4 FINAL (2026-06-04, ALL GREEN):**
-- All 10 deliverables exist + non-empty: docs/ARCHITECTURE.md (9.1k), ONBOARDING_CLIENT.md (4.0k), TEMPLATE_AUTHORING.md (5.3k), README.md (2.7k), templates/tg-clinic/{config.yaml, prompts/{dialogue,analyze,card}.txt, question_seed.json, README.md}.
-- tg-clinic integrity: config top-level keys IDENTICAL to tg-restaurant (channels, name, presentations, prompts, question_seed, storage, version). question_seed.json valid JSON, 7 entries (wait_time, staff_attentiveness, cleanliness, explanation_clarity, nps, price_value, improvement_wish), all have text/metric_key/expected_type; 4 enum entries carry non-empty enum_values.
-- 🟢 EXTRACTION PROOF: tmp-dir client (`template: tg-clinic`, no repo footprint) + empty creds → `load_client` returns AppContext, template_dir=tg-clinic, storage=None, channels/presentations populated. Proves R3 bootstrap extracts to a 2nd industry template. tmp cleaned up.
-- Placeholder check (INFORMATIONAL): tg-clinic prompts use `{restaurant_context}` (implementer kept verbatim) — same token as tg-restaurant, braces balanced, no typo-tokens. Cosmetically odd name in a clinic template but harmless (prompts not live-loaded, R3 files-only). Not a blocker.
-- Regression: `uv run pytest -q` → **475 passed** (exactly unchanged — docs-only phase added no tests), 1 pre-existing JWT warning. `uv run ruff check .` → clean. `uv run mypy .` → Success 146 files (unchanged → no .py added). `uv run ruff format --check .` → 146 files formatted.
-- Markdown link sanity: all relative links across the 5 new docs resolve to existing files. ✓
-- 🧹 Did NOT touch stray untracked `clients/_smoke_clinic/` and did not depend on it — used my own tmp dir.
-- **Gate verdict: GREEN. #10 completed. R4 ready to commit (exclude clients/_smoke_clinic/ from the commit).**
-- **Team-lead re-verified independently from main loop (12:16):** tg-clinic extraction proof OK (tmp client, empty creds → AppContext), pytest 475 passed, ruff clean, mypy 146 clean, question_seed 7 valid entries, `in_memory` adapter cited in ARCHITECTURE.md confirmed real. Matches tester numbers exactly.
-
-### Commit plan for curator (R4 — ONE atomic commit per plan)
-- Stage: `docs/ARCHITECTURE.md`, `docs/ONBOARDING_CLIENT.md`, `docs/TEMPLATE_AUTHORING.md`, `README.md`, `templates/tg-clinic/` (config.yaml + prompts/{dialogue,analyze,card}.txt + question_seed.json + README.md).
-- msg: `docs(architecture): R4 — M1 architecture docs + tg-clinic template stub`
-- ⚠️ EXCLUDE stray untracked `clients/_smoke_clinic/` (don't `git add`, or delete). STATUS.md + docs/REFACTOR_M1_PLAN.md = process docs — curator's call whether to fold into this commit.
-
-🧹 **CLEANUP for curator (R4 commit):** implementer left a stray untracked `clients/_smoke_clinic/config.yaml` (throwaway used to prove tg-clinic loads). It is NOT an R4 deliverable. Both implementer and team-lead hit permission-denial on `rm` (deletion needs main-loop approval). **Action: curator delete `clients/_smoke_clinic/` OR simply don't `git add` it** (it's untracked, so excluding it keeps the R4 commit clean). Real R4 deliverable in clients/ = none; only docs/ + templates/tg-clinic/ + README.md.
-
-**R3 archived (committed `6c20b70`):** bootstrap package + tg-restaurant template + _example client + secret-free loader fix (#5). Final gate 475 passed, ruff/format/mypy clean. One blocker found+fixed (eager SupabaseStorage → factory-based lazy adapters). Detail in git history + "Open questions" ratifications below.
+| Поверхность | Состояние |
+|---|---|
+| guest-бот (сбор фидбэка) | ✅ live, polling, systemd на VPS |
+| admin-бот (`/statistics`, `/topics`, `/miniapp`) | ✅ live, polling, systemd на VPS |
+| FastAPI HTTP API | ✅ live, systemd на VPS, публичный HTTPS через Caddy + nip.io |
+| Admin Mini App (template) | ✅ GitHub Template repo, Vite skeleton ship'нут |
+| Admin Mini App (instance) | ✅ live на Vercel, 5 страниц подключены к prod backend |
+| CI/CD | ✅ auto-deploy на push в main для backend; Vercel auto-deploy для frontend |
 
 ---
 
-## Open questions / decisions for curator
+## Архитектура (high-level)
 
-- ✅ **pyyaml dep**: approved + DONE. `pyyaml>=6.0.3` declared in pyproject.toml (line 21), `uv lock --check` passes — implementer already executed `uv add`. No further action.
-- ✅ **Design note: prompt extraction scope** (ratified by curator): R3 prompt extraction = files-only, no live load. `core/agent/prompts.py` constants untouched; .txt files are documentation + future-ready override hook. Live override (prompts.py reads template/prompts/*.txt) = separate feature, post-R4 / Phase 5 follow-up.
-- ✅ **registry.py vs inline dict** (reviewer verdict: KEEP as-is): team-lead reviewed `core/bootstrap/registry.py`. It reuses the legacy `main()`s (no router/dispatcher duplication — satisfies the thin-wrapper invariant) and the http_api runner has real logic (programmatic `uvicorn.Server`). Inlining would just relocate identical code into context.py. Not over-engineered. No change.
-- ✅ **BLOCKER RESOLVED (#5) — `load_client` now secret-free.** Fix verified by team-lead against live files + runtime: `build_storage`/`build_vector` (loader.py:44-59) now return a zero-arg factory (the adapter class), validate type at load, still fail-loud on unknown type; `load_client` builds factories not adapters (loader.py:74-75); `AppContext.storage`/`vector` are `init=False`/default None, populated in `run()` (context.py:27-47). Runtime check with empty SUPABASE/PINECONE creds → `load_client(clients/_example)` returns AppContext, storage=None, factory=SupabaseStorage, NO raise. PineconeVectorStore stays lazy. Contract change is the right design.
-- ✅ **3 stale-contract tests realigned (tester, #4) — RESOLVED.** Tester updated the 3 asserts to the new factory contract + added `test_load_client_is_secret_free` regression lock. All green (475 passed).
+```
+Telegram ──┐
+           │  (guest bot) ─────► bot-guest.service (aiogram polling)
+           │
+           │  (admin bot) ─────► bot-admin.service (aiogram polling)
+           │
+           │  (Mini App WebView)
+           │       ▼
+           │  https://telegram-admin-miniapp.vercel.app
+           │       │ (Vite SPA, Geist + InsightFlow palette)
+           │       │
+           │       │ axios + JWT
+           │       ▼
+           │  https://api-waiter.178-105-54-29.nip.io  (Caddy 2 + Let's Encrypt)
+           │       │ reverse_proxy 172.20.0.1:8200
+           │       ▼
+           │  voice-api.service (uvicorn @ 127.0.0.1:8200)
+           │       │
+           │       ▼
+           └─► presentations.http_api.main:app (FastAPI)
+                   │
+                   ├─► core.services.* (analytics, sessions, clients, ...)
+                   │       │
+                   │       ▼
+                   │   StorageAdapter Protocol
+                   │       │
+                   │       ├─► Supabase (Postgres) ── облако
+                   │       └─► Pinecone (vectors)  ── облако
+                   │
+                   └─► OpenAI (chat / Whisper / embeddings) ── облако
+```
+
+VPS: Hetzner CPX21 (`178.105.54.29`, Ubuntu 24.04), общий с двумя другими проектами (`landing`, `n8n + Backstage`). Caddy 2 в Docker compose стека n8n владеет 80/443 и проксирует все vhost'ы.
 
 ---
 
-## Recent events (newest first)
+## Репозитории
 
-- 2026-06-04 12:24 — **M1 COMPLETE.** R4 committed `752c8aa` (11 files, +702/-36, 475 passed). All 4 phases on main. Curator skipped final-review sweep (per-checkpoint tester validation made it redundant). Shutdown_requests out; team `feat-m1-r3` closing. 🎉
-- 2026-06-04 12:16 — team-lead: R4 GATE GREEN. Tester #10 completed + team-lead re-verified from main loop (tg-clinic extraction proof, 475 passed, ruff/mypy clean). All 5 R4 tasks done. Commit plan posted. Sent curator sign-off. **R4 ready to commit (1 atomic, exclude _smoke_clinic).** After commit → final review + team closure.
-- 2026-06-04 12:02 — team-lead: ALL R4 implementer tasks (#6-#9) done, self-gate green (475 passed, ruff/mypy clean). Dispatching tester for #10 gate. 🧹 Flagged stray untracked `clients/_smoke_clinic/` for curator cleanup (rm denied to subagents; exclude from commit or delete).
-- 2026-06-04 11:50 — team-lead: R4 #6 (ARCHITECTURE.md) + #7 (ONBOARDING + TEMPLATE_AUTHORING) done, grounded in real tree/code. #8 (tg-clinic) in progress, #9 (README) next. Corrected #8: {clinic_context} rename OK (template .txt not live-loaded — grep core/agent/ = 0 refs). Extraction proof = tmp-dir, no committed _example_clinic.
-- 2026-06-04 11:35 — team-lead: R3 committed `6c20b70` (curator). **GO R4.** 5 tasks created (4 docs/template → impl, 1 gate → tester). R4 = pure docs + tg-clinic stub, no prod-code/test changes. Dispatching implementer.
-- 2026-06-04 11:20 — team-lead: R3 GATE GREEN. Re-verified independently from main loop: secret-free smoke OK, pytest 475 passed, ruff/format/mypy all clean. All 5 tasks completed. Sent curator sign-off. **R3 ready to commit (curator commits from main loop).**
-- 2026-06-04 11:08 — team-lead: #5 fix VERIFIED (loader.py factories + AppContext init=False adapters; runtime empty-creds load → no raise). Blocker cleared. Handed tester 3 stale-contract test realigns (their zone) + re-run gate. R3 commit unblocks once #4 flips green.
-- 2026-06-04 10:52 — team-lead REVIEW: read bootstrap package. registry.py = KEEP (not over-engineered). Found 🔴 BLOCKER — load_client eagerly builds SupabaseStorage → requires SUPABASE creds at load (verified: SupabaseException on empty creds). Violates acceptance #5 (load must be secret-free). Local pass is a false-green from .env. Sent fix to implementer (lazy adapter construction); held R3 commit + warned tester.
-- 2026-06-04 10:40 — team-lead: #1-#3 all completed (14 files, implementer self-gate green). Ratified prompt-extraction = files-only (Phase 5 follow-up for live load). Confirmed pyyaml already in pyproject+lock (uv lock --check ✓). Dispatching tester for #4 (independent gate).
-- 2026-06-04 10:24 — team-lead: Task #1 completed (bootstrap package, all 5 files). #2 in_progress (tg-restaurant template). Tester correctly holding #4 (deps not met — coord rule #7).
-- 2026-06-04 10:12 — team-lead: 4 tasks created + assigned (impl #1→#2→#3 chained, tester #4). Implementer started on #1 (bootstrap). pyyaml=`uv add` confirmed in task #1.
-- 2026-06-04 09:58 — R3 dispatched, team `feat-m1-r3` spawned (curator)
-- 2026-06-04 09:58 — Previous team `feat-m1-refactor` disconnected (team-lead-2 unreachable)
-- 2026-06-04 ~09:48 — R2 committed `64231ac` (curator, 462 passed)
-- 2026-06-04 ~09:40 — R2 implementer flagged 3 deviations (backward-compat db param, get_supabase patch-target retained, data-access Protocol granularity), all ratified by curator
-- 2026-06-04 ~09:30 — R1 committed `fa62669` (curator)
-- 2026-06-04 ~09:24 — R1 patch-target sweep done (254 string literals across test files)
-- 2026-06-04 ~09:18 — R1 implementation done (78 renames, 137 files)
+| Репо | Где | HEAD | Назначение |
+|---|---|---|---|
+| **`mrkszn/feedback--analyst`** (`telegram-waiter`) | [github](https://github.com/mrkszn/feedback--analyst) | `98c42a1` | Backend monorepo: 2 бота + FastAPI + core services. CI auto-deploy на VPS. |
+| **`mrkszn/telegram-miniapp-template-vite`** | [github](https://github.com/mrkszn/telegram-miniapp-template-vite) | `2d2dd1f` + e2e fix | Generic Vite+React skeleton для admin Mini App'ов. `is_template: true` — «Use this template» работает. |
+| **`mrkszn/telegram-admin-miniapp`** | [github](https://github.com/mrkszn/telegram-admin-miniapp) | `5128d97` | Domain instance для telegram-waiter. Клонирован из template, 5 страниц подключены к prod backend. Vercel auto-deploy. |
 
 ---
 
-## Lessons baked from R1/R2 (apply to R3+)
+## Production-инфраструктура
 
-1. **`pytest --collect-only` ≠ `pytest -q`.** Collect catches import errors; full run catches runtime errors (e.g. string-literal patch targets). Always `pytest -q` before claiming done.
-2. **Patch-target sweep covers 4 call forms:** `patch("...")`, `patch.object("...", ...)`, `mocker.patch("...")`, `monkeypatch.setattr("...", ...)`. Import-grep alone misses these.
-3. **Backward-compat retention is OK** when it preserves existing tests without forcing massive fixture rewrites. Document the trade-off in commit body.
-4. **Curator commits from main loop.** Subagents hit permission denial on `git commit`; don't loop on retries — escalate to curator.
-5. **Idle notifications are normal**, not blockers. Don't react to them unless they impact your work.
-6. **Stale task-assignment messages can arrive after a task is completed.** Verify live task state before acting on a "start work" message.
-7. **Use STATUS.md** for curator communication, not SendMessage spam.
+### VPS `178.105.54.29`
+```
+bot-guest.service   active   (python -m channels.telegram.guest_bot)
+bot-admin.service   active   (python -m presentations.telegram_admin)
+voice-api.service   active   (uvicorn presentations.http_api.main:app --host 0.0.0.0 --port 8200)
+```
+Каждый рестартится через `sudo -n systemctl restart` от CI после rsync кода.
+
+### Публичные URL
+- **Backend API:** https://api-waiter.178-105-54-29.nip.io
+  - `/docs` → Swagger UI 200
+  - `/health` → `{"status":"ok"}` 200
+  - 8 admin endpoints (`/admin/auth`, `/admin/overview`, `/admin/metrics`, `/admin/topics`, `/admin/semantic`, `/admin/clients/{id}`, `/admin/ask`, `/admin/questions`)
+  - TLS: Let's Encrypt автообновляемый (Caddy)
+- **Mini App SPA:** https://telegram-admin-miniapp.vercel.app
+  - 5 routes: `/dashboard`, `/metrics`, `/topics`, `/clients`, `/ask`
+  - Build hash после polish: `index-CVnvYToh.js` (Vercel ребилдит при каждом push)
+- **BotFather config:** admin-бот → Mini App URL = выше Vercel domain
+
+### Облако
+- Supabase: `mkhalqkrpkluhtskoybi.supabase.co` (dev пока используется и в prod)
+- Pinecone: namespace `prod`
+- OpenAI: единый ключ, usage_tag=`prod`
+
+---
+
+## Фазы — done log
+
+### Phase 0 — guest-бот + анкета (M0 baseline)
+✅ aiogram polling, LangGraph узлы (analyze / dialogue / card), Whisper для voice. Pre-M1.
+
+### Phase 1 — admin-бот + аналитика
+✅ `/statistics`, `/topics`, `/questions` CRUD. Free-text → analytics agent v2 (interpret → execute → synthesize, два phase'а).
+
+### Phase 2 — seed данные
+✅ 50 fake-клиентов, ~75 сессий, реальные embeddings в Pinecone (`a0babf0 chore(scripts): seed_demo_data`).
+
+### Phase 3 — analytics agent v2
+✅ Two-phase ReAct (`f0cab96`), wired into bot и HTTP API (`6ab51ab`).
+
+### Phase 4A — FastAPI HTTP API
+✅ 7 admin endpoints + Telegram initData валидация + JWT issue/verify + CORS. Pre-этой conversation. (`api/*` → переехало в `presentations/http_api/*` в R1.)
+
+### M1 рефакторинг — modular template architecture
+✅ Закрыто 4 июня этой conversation.
+- R1 (`fa62669`): layered структура `core / channels / presentations` (137 файлов, 462 pytest)
+- R2 (`64231ac`): StorageAdapter Protocol + Supabase/Pinecone адаптеры (17 файлов, 462 pytest)
+- R3 (`6c20b70`): `core/bootstrap/` template loader + `templates/tg-restaurant/` + `clients/_example/` (15 новых файлов, 475 pytest)
+- R4 (`752c8aa`): `docs/{ARCHITECTURE, ONBOARDING_CLIENT, TEMPLATE_AUTHORING}.md` + `templates/tg-clinic/` stub (11 файлов)
+- Финальные тесты: 475 passed, ruff/mypy clean.
+
+### Phase 4B — generic Mini App template (Vite + React)
+✅ Закрыто в отдельной сессии (не в этой conversation).
+- Репо `telegram-miniapp-template-vite` подготовлен с design/ + BUILD_PLAN.md.
+- 7 атомарных коммитов: bootstrap → design tokens → telegram SDK → auth → API client → AppShell → primitives.
+- Vite 5 + React 19 + TS strict + Tailwind + shadcn/ui + Tremor + Geist + Instrument Serif.
+- `is_template: true` поставлен на GitHub.
+
+### Phase 4C — domain instance `telegram-admin-miniapp`
+✅ Закрыто в отдельной сессии (не в этой conversation).
+- Клонирован из template через «Use this template».
+- 6 атомарных коммитов: scaffold + dashboard + metrics + topics + clients + ask.
+- Подключён к https://api-waiter.178-105-54-29.nip.io через JWT axios interceptor.
+- Vercel deploy под именем `telegram-admin-miniapp.vercel.app`.
+
+### Production deploy (этой conversation)
+✅ Backend HTTP API экспонирован публично:
+- `voice-api.service` поднят (`b5b05b5`), unit ExecStart исправлен (`5530fcf`), poll-loop вместо flat sleep (`ccd986b`, `3b91365`).
+- Caddy 2 уже стоял в n8n compose stack — добавили vhost `api-waiter.178-105-54-29.nip.io` в Caddyfile через bootstrap скрипт.
+- Подводные камни: ufw default-deny блокировал bridge → uvicorn (`6847357`), Docker `host-gateway` резолвится в dead docker0 (`98c42a1`). Оба зафиксированы идемпотентно в `deploy/install-voice-api.sh` для будущих хостов.
+- Backward-compat шим `bot_guest/__main__.py` + `bot_admin/__main__.py` остаётся в репо для свежих VPS, у которых systemd unit ещё не обновили (`018df12`).
+
+### UI polish после 4C (текущая сессия)
+✅ Commit `5128d97` в `telegram-admin-miniapp`:
+- Theme switcher (auto/light/dark, циклит) в хедере, persist в localStorage
+- Шрифт заголовков Instrument Serif italic → Geist Sans 600 weight (длинные русские слова перестали выезжать)
+- KPICard overflow guards: `min-w-0 overflow-hidden`, `break-words`, `--kpi-size` 38→30 px
+
+---
+
+## Что сейчас в работе
+
+Ничего блокирующего. Жду визуальный smoke от куратора после Vercel редеплоя (commit `5128d97` → ~30s).
+
+---
+
+## Backlog (приоритизированный)
+
+### A — perf / observability
+- **Bundle split** для charts (842 KB → lazy chunk уже есть, но instance подгружает на старте). Эффект: KPI экраны откроются в ~2× быстрее на slow Telegram WebView.
+- **UptimeRobot** пинг каждые 5 мин на `/health` и Vercel `/` → email/Telegram при downtime
+- **Sentry** для FastAPI и Vite SPA (free 5k events)
+
+### B — UX
+- Дашборд: вывести «Recent feedback» list (сейчас пусто, был помечен TODO в 4C #2)
+- Brand color picker (InsightFlow Tweaks panel имеет 3 палитры — violet/indigo/teal) — можно в Settings tab
+- Density toggle (comfortable/compact) — токены `.density-compact` уже готовы
+- Skeleton state улучшить (shadcn shimmer вместо `opacity-50`)
+
+### C — модульность (M2/M3 в plan'е)
+- Второй template из `templates/tg-clinic/` стаба — реальный второй проект (e.g. для парикмахерских / клиник)
+- Per-tenant deploy через `core/bootstrap/` (сейчас bootstrap есть, но используется только тестово через `_example`)
+
+### D — qa
+- Playwright e2e на все 5 routes с mock backend
+- Тесты на theme switcher (auto/light/dark)
+- Тесты на JWT 401 retry в /ask
+
+---
+
+## Open questions / решения для куратора
+
+- ⚠️ **dev и prod на одной Supabase + Pinecone.** Когда заведём отдельные prod-credentials — обновить `.env` на VPS + перезапустить bots.
+- ⚠️ **bot_guest/bot_admin shims остаются.** Можно удалить когда:
+  - либо вручную обновить unit'ы на VPS (`/etc/systemd/system/bot-*.service` сейчас уже на новых путях после первой ручной установки)
+  - либо широченнее sudoers для CI чтобы он мог сам устанавливать unit'ы
+- ⚠️ **nip.io URL длинный и нечитаемый.** Покупка домена + DNS A → 178.105.54.29 → Caddy выпустит новый cert автоматически. ~$10/год.
+- 🔵 **Recent feedback list на dashboard** — оставлять TODO до следующей итерации?
+
+---
+
+## Lessons learned (M1 + 4*)
+
+1. **`pytest --collect-only ≠ pytest -q`** — collect только импорты, runtime ошибки видит только полный прогон.
+2. **Patch-target sweep** при ренейме модулей покрывает 4 формы: `patch("...")`, `patch.object(...)`, `mocker.patch("...")`, `monkeypatch.setattr("...")`. Import-grep ловит только первую.
+3. **Backward-compat retention OK** когда экономит массовый refactor тестов. Документировать в commit body.
+4. **Curator коммитит из main loop.** Subagents fail на `git commit` (permission denial).
+5. **STATUS.md > SendMessage spam** для коммуникации с куратором.
+6. **Один implementer per file at a time.**
+7. **Длинный `sleep N` после systemctl restart — антипаттерн.** Polling по реальному signal (curl /docs, is-active loop) надёжнее.
+8. **ufw interface-agnostic by default.** Нужно либо `from <range>` либо `in on <iface>` чтобы не задеть legitimate bridge traffic.
+9. **Docker `host-gateway` keyword резолвится в default bridge (docker0), не в bridge самого контейнера.** На мульти-bridge хостах нужно динамически детектить (`ip route show default` внутри контейнера) и пинить explicit IP.
+10. **shadcn warning «Fast refresh only works when a file only exports components»** — не error, можно игнорить или вынести `buttonVariants` constants в отдельный файл.
