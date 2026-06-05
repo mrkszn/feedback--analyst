@@ -13,7 +13,7 @@ EnvironmentFile=/etc/telegram-waiter/.env
 # (docker0 bridge IP on the host) can reach us. Same pattern as the existing
 # landing site on :8090. Public reachability of http://<vps-ip>:8200 should
 # be blocked by ufw — see deploy/install-voice-api.sh for the rule.
-ExecStart=/opt/telegram-waiter/.venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8200
+ExecStart=/opt/telegram-waiter/.venv/bin/uvicorn presentations.http_api.main:app --host 0.0.0.0 --port 8200
 Restart=always
 RestartSec=5
 StandardOutput=append:/var/log/telegram-waiter/voice-api.log
