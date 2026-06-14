@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, Message
 from aiogram.utils.chat_action import ChatActionSender
 
 from channels.telegram.common.fsm.states import GuestFlow
+from channels.telegram.guest_bot.intent import looks_like_greeting
 from channels.telegram.guest_bot.keyboards import build_question_keyboard
 from config import settings
 from core.agent.nodes.analyze import analyze_feedback
@@ -150,6 +151,15 @@ async def guest_feedback_text(message: Message, state: FSMContext) -> None:
     if not text:
         await message.answer("Похоже, сообщение пустое — попробуйте ещё раз.")
         return
+    # User was greeted (via /start or auto-greet) and replied with a bare
+    # "привет" / "добрый день" instead of real feedback. Don't open a
+    # session on it — gently re-prompt and stay in AWAITING_FEEDBACK so the
+    # next (substantive) message flows through here.
+    if looks_like_greeting(text):
+        await message.answer(
+            "Расскажите парой слов, как прошёл заказ и доставка — что понравилось, а что нет 🙂"
+        )
+        return
     await _process_feedback(message, state, raw_text=text, source="text")
 
 
@@ -158,8 +168,8 @@ async def process_voice_message(message: Message, state: FSMContext) -> None:
 
     Extracted so the no-state catch-all in handlers/start.py can reuse the
     same pipeline when a brand-new user sends a voice as their very first
-    message (without /start) — we then auto-greet AND process the voice
-    in a single turn.
+    message (without /start) — voice is always treated as feedback, so the
+    dialogue's first turn greets and reacts (no separate WELCOME).
     """
     voice = message.voice
     bot = message.bot
