@@ -70,7 +70,22 @@ curl -X POST http://localhost:8000/admin/ask \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $JWT" \
   -d '{"question": "Что чаще всего жалуются за последнюю неделю?"}'
+
+# 8) Settings — настройки текущего админа (theme/language/notifications)
+curl 'http://localhost:8000/admin/settings' \
+  -H "Authorization: Bearer $JWT"
+
+# 9) Settings update — частичный PATCH (присылай только меняющиеся поля)
+curl -X PUT http://localhost:8000/admin/settings \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $JWT" \
+  -d '{"theme": "dark", "language": "en", "notifications_enabled": false}'
 ```
+
+`GET/PUT /admin/settings` — на текущего админа (telegram_id берётся из JWT,
+тело параметра не несёт). `theme ∈ {light, dark, system}`, `language ∈ {ru, en}`,
+`notifications_enabled: bool`. Отсутствие строки в `admin_settings` = дефолты
+(`system` / `ru` / `true`); PUT — partial update, незаданные поля не трогаются.
 
 ## Out of scope сейчас
 
