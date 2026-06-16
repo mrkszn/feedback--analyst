@@ -144,6 +144,28 @@ class AskResponse(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
+# settings
+
+
+Theme = Literal["light", "dark", "system"]
+Language = Literal["ru", "en"]
+
+
+class AdminSettingsResponse(BaseModel):
+    theme: Theme
+    language: Language
+    notifications_enabled: bool
+
+
+class AdminSettingsUpdate(BaseModel):
+    """Partial update — only the provided fields change; others are untouched."""
+
+    theme: Theme | None = None
+    language: Language | None = None
+    notifications_enabled: bool | None = None
+
+
+# --------------------------------------------------------------------------- #
 # shared query helpers
 
 
