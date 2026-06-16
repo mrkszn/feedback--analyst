@@ -26,6 +26,21 @@ from channels.telegram.common.fsm.states import GuestFlow
 from channels.telegram.guest_bot.handlers import feedback as fh
 from channels.telegram.guest_bot.handlers import start as sh
 
+# First-timer re-entry context — patched in so greeting tests don't hit
+# Supabase via load_reentry_context (which guest_start/auto_greet now call).
+_FIRST_TIMER = {
+    "is_returning": False,
+    "sessions_count": 0,
+    "last_session_at": None,
+    "top_topic": None,
+}
+_RETURNING = {
+    "is_returning": True,
+    "sessions_count": 2,
+    "last_session_at": "2026-06-01T12:00:00+00:00",
+    "top_topic": "курьер",
+}
+
 
 @pytest.fixture
 def state() -> FSMContext:
@@ -53,16 +68,35 @@ async def test_auto_greet_greeting_only_welcomes(state: FSMContext) -> None:
 
     with (
         patch.object(sh, "create_or_get_client", new=AsyncMock()),
+        patch.object(sh, "load_reentry_context", new=AsyncMock(return_value=_FIRST_TIMER)),
         patch.object(fh, "_process_feedback", new=AsyncMock()) as p_proc,
         patch.object(fh, "process_voice_message", new=AsyncMock()) as p_voice,
     ):
         await sh.guest_auto_greet(msg, state)
 
-    # Ровно одно сообщение — WELCOME, и пайплайн не запущен.
+    # Ровно одно сообщение — WELCOME (first-timer), и пайплайн не запущен.
     msg.answer.assert_awaited_once_with(sh.WELCOME)
     p_proc.assert_not_awaited()
     p_voice.assert_not_awaited()
     assert await state.get_state() == GuestFlow.AWAITING_FEEDBACK.state
+
+
+async def test_auto_greet_greeting_returning_personalizes(state: FSMContext) -> None:
+    msg = _make_message_mock(text="привет")
+
+    with (
+        patch.object(sh, "create_or_get_client", new=AsyncMock()),
+        patch.object(sh, "load_reentry_context", new=AsyncMock(return_value=_RETURNING)),
+        patch.object(fh, "_process_feedback", new=AsyncMock()) as p_proc,
+    ):
+        await sh.guest_auto_greet(msg, state)
+
+    p_proc.assert_not_awaited()
+    msg.answer.assert_awaited_once()
+    sent = msg.answer.await_args.args[0]
+    assert sent != sh.WELCOME
+    assert "С возвращением" in sent
+    assert "курьер" in sent  # top_topic surfaced
 
 
 async def test_auto_greet_blank_text_welcomes(state: FSMContext) -> None:
@@ -70,6 +104,7 @@ async def test_auto_greet_blank_text_welcomes(state: FSMContext) -> None:
 
     with (
         patch.object(sh, "create_or_get_client", new=AsyncMock()),
+        patch.object(sh, "load_reentry_context", new=AsyncMock(return_value=_FIRST_TIMER)),
         patch.object(fh, "_process_feedback", new=AsyncMock()) as p_proc,
     ):
         await sh.guest_auto_greet(msg, state)
@@ -165,3 +200,35 @@ async def test_awaiting_feedback_substantive_processes(state: FSMContext) -> Non
     p_proc.assert_awaited_once()
     assert p_proc.await_args is not None
     assert p_proc.await_args.kwargs["raw_text"] == "всё понравилось, курьер вежливый"
+
+
+# ----------------------------- /start: personalization --------------------- #
+
+
+async def test_guest_start_first_timer_welcomes(state: FSMContext) -> None:
+    msg = _make_message_mock(text="/start")
+
+    with (
+        patch.object(sh, "create_or_get_client", new=AsyncMock()),
+        patch.object(sh, "load_reentry_context", new=AsyncMock(return_value=_FIRST_TIMER)),
+    ):
+        await sh.guest_start(msg, state)
+
+    msg.answer.assert_awaited_once_with(sh.WELCOME)
+    assert await state.get_state() == GuestFlow.AWAITING_FEEDBACK.state
+
+
+async def test_guest_start_returning_personalizes(state: FSMContext) -> None:
+    msg = _make_message_mock(text="/start")
+
+    with (
+        patch.object(sh, "create_or_get_client", new=AsyncMock()),
+        patch.object(sh, "load_reentry_context", new=AsyncMock(return_value=_RETURNING)),
+    ):
+        await sh.guest_start(msg, state)
+
+    msg.answer.assert_awaited_once()
+    sent = msg.answer.await_args.args[0]
+    assert sent != sh.WELCOME
+    assert "С возвращением" in sent
+    assert await state.get_state() == GuestFlow.AWAITING_FEEDBACK.state

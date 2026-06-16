@@ -22,6 +22,7 @@ from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from channels.telegram.common.fsm.states import GuestFlow
+from channels.telegram.guest_bot.copy import GUEST_GOODBYE
 from channels.telegram.guest_bot.handlers import dialogue as dh
 from core.agent.nodes.dialogue import DialogueTurn
 
@@ -258,7 +259,7 @@ async def test_offer_survey_empty_pool_finalizes(state: FSMContext) -> None:
     assert msg.answer.await_count == 2
     assert msg.answer.await_args_list[0].args[0] == fake_turn.bot_reply
     goodbye = msg.answer.await_args_list[1].args[0]
-    assert "Спасибо большое за рассказ" in goodbye
+    assert goodbye == GUEST_GOODBYE
 
     # _finalize_session вызван с answers=[]
     p_finalize.assert_awaited_once()

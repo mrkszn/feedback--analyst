@@ -4,6 +4,7 @@ from aiogram.types import CallbackQuery
 from aiogram.utils.chat_action import ChatActionSender
 
 from channels.telegram.common.fsm.states import GuestFlow
+from channels.telegram.guest_bot.copy import GUEST_GOODBYE
 from channels.telegram.guest_bot.handlers.feedback import _ask_next_question, _finalize_session
 from core.agent.nodes.analyze import FeedbackSummary
 from core.agent.nodes.select import select_adaptive_questions
@@ -35,7 +36,7 @@ async def consent_yes(callback: CallbackQuery, state: FSMContext) -> None:
         if not pool:
             # Defensive: dialogue handler should have routed away, но админ мог
             # удалить все вопросы пока шёл диалог.
-            await callback.message.answer("Кажется, вопросов больше нет. Спасибо за разговор! 🙏")
+            await callback.message.answer(GUEST_GOODBYE)
             await state.update_data(finalize_message_sent=True)
             await _finalize_session(
                 callback.message,  # type: ignore[arg-type]
@@ -49,7 +50,7 @@ async def consent_yes(callback: CallbackQuery, state: FSMContext) -> None:
 
         if not selected.question_ids:
             # Селектор ничего не выбрал — интервью не запускаем.
-            await callback.message.answer("Кажется, вопросов больше нет. Спасибо за разговор! 🙏")
+            await callback.message.answer(GUEST_GOODBYE)
             await state.update_data(finalize_message_sent=True)
             await _finalize_session(
                 callback.message,  # type: ignore[arg-type]
@@ -88,9 +89,7 @@ async def consent_no(callback: CallbackQuery, state: FSMContext) -> None:
         return
 
     async with ChatActionSender.typing(chat_id=callback.message.chat.id, bot=bot):
-        await callback.message.answer(
-            "Спасибо большое за рассказ! 🙏 Передам владельцу. Хорошего дня! ☀️"
-        )
+        await callback.message.answer(GUEST_GOODBYE)
         data = await state.get_data()
         summary_dict = data.get("feedback_summary") or data["summary"]
         summary = FeedbackSummary.model_validate(summary_dict)

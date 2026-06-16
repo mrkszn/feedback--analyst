@@ -54,6 +54,21 @@ class ActivityBlock(TypedDict):
     returning_clients: int  # клиенты с >= 2 сессий в периоде
 
 
+class LoopMetrics(TypedDict):
+    """Recurrence metrics — does the feedback loop actually repeat?
+
+    Все три считаются по сессиям ВНУТРИ окна (не глобально по клиенту):
+    - repeat_rate — доля клиентов с ≥2 сессиями (returning/unique), 0..1;
+    - sessions_per_client — sessions_started / unique_clients;
+    - median_days_to_2nd — медиана разрыва (в днях) между 1-й и 2-й сессией
+      вернувшихся клиентов; None если вернувшихся нет.
+    """
+
+    repeat_rate: float
+    sessions_per_client: float
+    median_days_to_2nd: float | None
+
+
 class TopicRow(TypedDict):
     topic: str
     count: int
@@ -89,6 +104,7 @@ class FullReport(TypedDict):
     date_from: str | None  # ISO; None если БД пуста
     date_to: str  # ISO (now или фактический end)
     activity: ActivityBlock
+    loop: LoopMetrics
     sentiment_counts: SentimentCounts
     sentiment_total: int
     avg_sentiment: float | None
@@ -101,6 +117,60 @@ class FullReport(TypedDict):
 
 # --------------------------------------------------------------------------- #
 # helpers
+
+
+def _median(values: list[float]) -> float | None:
+    """Median of a list of floats, or None when empty."""
+    if not values:
+        return None
+    s = sorted(values)
+    n = len(s)
+    mid = n // 2
+    if n % 2 == 1:
+        return s[mid]
+    return (s[mid - 1] + s[mid]) / 2.0
+
+
+def _parse_ts(raw: Any) -> datetime | None:
+    """Parse an ISO `started_at` (handles trailing Z); None on bad/empty input."""
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _loop_metrics(
+    sessions: list[dict[str, Any]],
+    *,
+    sessions_started: int,
+    unique_clients: int,
+    returning_clients: int,
+) -> LoopMetrics:
+    """Recurrence metrics from window sessions (see LoopMetrics docstring)."""
+    repeat_rate = (returning_clients / unique_clients) if unique_clients else 0.0
+    sessions_per_client = (sessions_started / unique_clients) if unique_clients else 0.0
+
+    # First-to-second-session gap (days) per returning client.
+    starts_by_client: dict[int, list[datetime]] = defaultdict(list)
+    for s in sessions:
+        cid = s.get("client_id")
+        ts = _parse_ts(s.get("started_at"))
+        if cid is not None and ts is not None:
+            starts_by_client[int(cid)].append(ts)
+    gaps: list[float] = []
+    for starts in starts_by_client.values():
+        if len(starts) < 2:
+            continue
+        starts.sort()
+        gaps.append((starts[1] - starts[0]).total_seconds() / 86400.0)
+
+    return LoopMetrics(
+        repeat_rate=repeat_rate,
+        sessions_per_client=sessions_per_client,
+        median_days_to_2nd=_median(gaps),
+    )
 
 
 def _classify_topic(rows: list[TopicRow]) -> tuple[list[TopicRow], list[TopicRow], list[TopicRow]]:
@@ -307,6 +377,13 @@ async def full_report(
         returning_clients=returning_clients,
     )
 
+    loop = _loop_metrics(
+        sessions,
+        sessions_started=sessions_started,
+        unique_clients=unique_clients,
+        returning_clients=returning_clients,
+    )
+
     # ---------- sentiment ----------
     sentiment_counts = SentimentCounts(positive=0, neutral=0, negative=0)
     sentiment_scores: list[float] = []
@@ -379,6 +456,7 @@ async def full_report(
         date_from=iso_from if sessions_started > 0 or date_from != date_to else None,
         date_to=iso_to,
         activity=activity,
+        loop=loop,
         sentiment_counts=sentiment_counts,
         sentiment_total=sentiment_total,
         avg_sentiment=avg_sentiment,
@@ -480,6 +558,16 @@ def build_csv_report(report: FullReport) -> str:
     """
     buf = io.StringIO()
     writer = csv.writer(buf)
+
+    # ---------- Loop (recurrence) ----------
+    loop = report.get("loop")
+    if loop is not None:
+        writer.writerow(["# Loop"])
+        writer.writerow(["metric", "value"])
+        writer.writerow(["repeat_rate", _fmt_num(loop["repeat_rate"])])
+        writer.writerow(["sessions_per_client", _fmt_num(loop["sessions_per_client"])])
+        writer.writerow(["median_days_to_2nd", _fmt_num(loop["median_days_to_2nd"])])
+        writer.writerow([])
 
     # ---------- Sessions ----------
     writer.writerow(["# Sessions"])

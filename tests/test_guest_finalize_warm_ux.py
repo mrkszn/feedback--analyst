@@ -20,6 +20,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
 
+from channels.telegram.guest_bot.copy import GUEST_GOODBYE
 from channels.telegram.guest_bot.handlers import feedback as fb
 
 
@@ -125,9 +126,11 @@ async def test_finalize_session_sends_warm_goodbye(state: FSMContext) -> None:
     # The old curt goodbye must NOT appear
     sent_texts = [c.args[0] for c in msg.answer.await_args_list]
     assert all(t != "Спасибо за отзыв! Хорошего дня." for t in sent_texts)
-    # The warm goodbye includes a thank-you + heart + a sign-off emoji
-    assert any("Спасибо большое" in t for t in sent_texts)
-    assert any("🙏" in t for t in sent_texts)
+    # The warm goodbye is the centralized GUEST_GOODBYE — thank-you + heart,
+    # the "owner reads every review" reinforcement, and a bridge to next time.
+    assert any(t == GUEST_GOODBYE for t in sent_texts)
+    assert any("Спасибо большое" in t and "🙏" in t for t in sent_texts)
+    assert any("следующего заказа" in t.lower() for t in sent_texts)
 
 
 async def test_finalize_session_skips_goodbye_if_already_sent(state: FSMContext) -> None:

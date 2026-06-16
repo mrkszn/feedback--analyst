@@ -93,6 +93,26 @@ def test_first_message_has_header_and_period() -> None:
     assert "7 дней" in messages[0]
 
 
+def test_loop_block_rendered_when_present() -> None:
+    report = _report()
+    cast(dict, report)["loop"] = {
+        "repeat_rate": 0.25,
+        "sessions_per_client": 1.67,
+        "median_days_to_2nd": 3.0,
+    }
+    text = "\n".join(format_report(report))
+    assert "🔁 Повторяемость" in text
+    assert "25%" in text  # repeat_rate
+    assert "Сессий на клиента: 1.67" in text
+    assert "3.0 дн." in text
+
+
+def test_loop_block_absent_when_missing() -> None:
+    # _report() carries no "loop" key → recurrence block silently omitted.
+    text = "\n".join(format_report(_report()))
+    assert "🔁 Повторяемость" not in text
+
+
 def test_enum_metric_has_ascii_bar() -> None:
     text = "\n".join(format_report(_report()))
     assert "█" in text

@@ -6,11 +6,23 @@ from aiogram.types import Message
 from channels.telegram.common.fsm.states import GuestFlow
 from channels.telegram.guest_bot.intent import looks_like_greeting
 from core.services.clients import create_or_get_client
+from core.services.re_entry import load_reentry_context, reentry_greeting
 
 router = Router(name="guest_start")
 
 
 WELCOME = "Привет! 👋 Расскажи, как прошёл заказ и доставка — голосом или текстом, как удобнее."
+
+
+async def _greeting_for(telegram_id: int) -> str:
+    """Personalized greeting for a returning client, else the static WELCOME.
+
+    Returning-detection comes from the DB (via load_reentry_context), so it
+    survives pod restarts that wipe the in-memory FSM store. Falls back to
+    WELCOME for first-timers and on any lookup miss.
+    """
+    ctx = await load_reentry_context(telegram_id)
+    return reentry_greeting(ctx) or WELCOME
 
 
 @router.message(CommandStart())
@@ -22,7 +34,7 @@ async def guest_start(message: Message, state: FSMContext) -> None:
         name=message.from_user.full_name,
     )
     await state.set_state(GuestFlow.AWAITING_FEEDBACK)
-    await message.answer(WELCOME)
+    await message.answer(await _greeting_for(message.from_user.id))
 
 
 # Catch any text/voice message from a user with NO FSM state set —
@@ -59,7 +71,10 @@ async def guest_auto_greet(message: Message, state: FSMContext) -> None:
     if message.text is not None:
         text = message.text.strip()
         if not text or looks_like_greeting(text):
-            await message.answer(WELCOME)
+            # Greeting branch only — personalize. The substantive-feedback
+            # branch below deliberately skips this extra DB read so a real
+            # review isn't delayed at intake.
+            await message.answer(await _greeting_for(message.from_user.id))
             return
         from channels.telegram.guest_bot.handlers.feedback import _process_feedback
 

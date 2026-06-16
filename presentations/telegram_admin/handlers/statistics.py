@@ -100,6 +100,22 @@ def _topic_lines(rows: Sequence[Mapping[str, Any]], indent: str = "  ") -> str:
     return "\n".join(parts)
 
 
+def _loop_lines(report: FullReport) -> list[str]:
+    """Recurrence block (🔁) — empty list if the report carries no loop data."""
+    loop = report.get("loop")
+    if loop is None:
+        return []
+    to_2nd = loop["median_days_to_2nd"]
+    to_2nd_str = "—" if to_2nd is None else f"{to_2nd:.1f} дн."
+    return [
+        "🔁 Повторяемость",
+        f"  Повторно оставили отзыв: {loop['repeat_rate'] * 100:.0f}%",
+        f"  Сессий на клиента: {loop['sessions_per_client']:.2f}",
+        f"  Медиана до 2-го отзыва: {to_2nd_str}",
+        "",
+    ]
+
+
 _TG_LIMIT = 4096
 _BAR_WIDTH = 10
 _LABEL_CAP = 24
@@ -188,6 +204,7 @@ def format_report(report: FullReport) -> list[str]:
         f"  Уникальных клиентов: {act['unique_clients']}",
         f"  Возвращающихся (≥2 сессии): {act['returning_clients']}",
         "",
+        *_loop_lines(report),
         "😊 Тональность завершённых отзывов",
         f"  💚 Позитив: {sentiments['positive']} ({_pct(sentiments['positive'], total_sent)})",
         f"  😐 Нейтрал: {sentiments['neutral']} ({_pct(sentiments['neutral'], total_sent)})",

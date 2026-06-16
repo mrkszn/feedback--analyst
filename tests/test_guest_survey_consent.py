@@ -20,6 +20,7 @@ from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from channels.telegram.common.fsm.states import GuestFlow
+from channels.telegram.guest_bot.copy import GUEST_GOODBYE
 from channels.telegram.guest_bot.handlers import survey_consent as sc
 from core.agent.nodes.select import SelectedQuestions
 
@@ -184,7 +185,7 @@ async def test_consent_no_sends_goodbye_and_finalizes(state: FSMContext) -> None
     cb.message.answer.assert_awaited_once()
     assert cb.message.answer.await_args is not None
     text = cb.message.answer.await_args.args[0]
-    assert "Спасибо большое за рассказ" in text
+    assert text == GUEST_GOODBYE
 
     # finalize_message_sent выставлен
     data = await state.get_data()

@@ -24,6 +24,7 @@ from aiogram.types import (
 from aiogram.utils.chat_action import ChatActionSender
 
 from channels.telegram.common.fsm.states import GuestFlow
+from channels.telegram.guest_bot.copy import GUEST_GOODBYE, SURVEY_OFFER
 from channels.telegram.guest_bot.handlers.feedback import _finalize_session
 from config import settings
 from core.agent.nodes.analyze import FeedbackSummary
@@ -138,18 +139,13 @@ async def _emit_survey_offer_or_finalize(
                 ]
             ]
         )
-        await message.answer(
-            "Спасибо за разговор! 🙏 У сервиса есть пара коротких вопросов "
-            "специально под твой отзыв — займут минутку. За ответы я подарю "
-            "скидку 🎁 на следующий заказ. Хочешь попробовать?",
-            reply_markup=keyboard,
-        )
+        await message.answer(SURVEY_OFFER, reply_markup=keyboard)
         await state.set_state(GuestFlow.AWAITING_SURVEY_CONSENT)
         return
 
     # Pool empty — finalize silently (we send our own goodbye to avoid the
     # default one in _finalize_session).
-    await message.answer("Спасибо большое за рассказ! 🙏 Передам владельцу. Хорошего дня! ☀️")
+    await message.answer(GUEST_GOODBYE)
     await state.update_data(finalize_message_sent=True)
     summary = FeedbackSummary.model_validate(feedback_summary_data)
     await _finalize_session(message, state, summary=summary, answers=[])

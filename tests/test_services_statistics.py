@@ -340,6 +340,10 @@ async def test_full_report_aggregates_sessions_and_topics() -> None:
     assert report["activity"]["sessions_finished"] == 2
     assert report["activity"]["unique_clients"] == 2
     assert report["activity"]["returning_clients"] == 1  # client 100 → 2 сессии
+    # loop: 1 из 2 клиентов вернулся; 3 сессии / 2 клиента; client 100 gap 30→31 мая
+    assert report["loop"]["repeat_rate"] == pytest.approx(0.5)
+    assert report["loop"]["sessions_per_client"] == pytest.approx(1.5)
+    assert report["loop"]["median_days_to_2nd"] == pytest.approx(1.0)
     assert report["sentiment_counts"]["positive"] == 2
     assert report["sentiment_counts"]["negative"] == 1
     assert report["sentiment_counts"]["neutral"] == 0
@@ -370,6 +374,10 @@ async def test_full_report_empty_database() -> None:
     assert report["topics_negative"] == []
     assert report["metrics"] == []
     assert report["recent_sessions"] == []
+    # loop: пустая БД → нули, медиана None (нет вернувшихся)
+    assert report["loop"]["repeat_rate"] == 0.0
+    assert report["loop"]["sessions_per_client"] == 0.0
+    assert report["loop"]["median_days_to_2nd"] is None
 
 
 async def test_full_report_validates_dates() -> None:
@@ -435,6 +443,11 @@ def _csv_report(
             "unique_clients": 0,
             "returning_clients": 0,
         },
+        "loop": {
+            "repeat_rate": 0.5,
+            "sessions_per_client": 1.5,
+            "median_days_to_2nd": 2.0,
+        },
         "sentiment_counts": {"positive": 0, "neutral": 0, "negative": 0},
         "sentiment_total": 0,
         "avg_sentiment": None,
@@ -494,9 +507,30 @@ def _full_csv_report() -> FullReport:
 
 def test_build_csv_report_has_all_sections() -> None:
     out = build_csv_report(_full_csv_report())
+    assert "# Loop" in out
     assert "# Sessions" in out
     assert "# Metrics" in out
     assert "# Topics" in out
+
+
+def test_build_csv_report_loop_section_values() -> None:
+    out = build_csv_report(_csv_report())
+    assert "# Loop" in out
+    rows = list(csv.reader(io.StringIO(out)))
+    loop_rows = {
+        r[0]: r[1]
+        for r in rows
+        if len(r) == 2
+        and r[0]
+        in {
+            "repeat_rate",
+            "sessions_per_client",
+            "median_days_to_2nd",
+        }
+    }
+    assert loop_rows["repeat_rate"] == "0.5"
+    assert loop_rows["sessions_per_client"] == "1.5"
+    assert loop_rows["median_days_to_2nd"] == "2"
 
 
 def test_build_csv_report_is_valid_csv() -> None:

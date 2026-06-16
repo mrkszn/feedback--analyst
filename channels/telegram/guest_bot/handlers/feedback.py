@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, Message
 from aiogram.utils.chat_action import ChatActionSender
 
 from channels.telegram.common.fsm.states import GuestFlow
+from channels.telegram.guest_bot.copy import GUEST_GOODBYE
 from channels.telegram.guest_bot.intent import looks_like_greeting
 from channels.telegram.guest_bot.keyboards import build_question_keyboard
 from config import settings
@@ -390,9 +391,7 @@ async def _finalize_session(
     await state.clear()
     # Если ранее уже отправили finalize-сообщение (empty-pool case) — не дублируем.
     if not data.get("finalize_message_sent"):
-        await message.answer(
-            "Спасибо большое! 🙏 Передам владельцу — твой отзыв пойдёт в дело. Хорошего дня! ☀️"
-        )
+        await message.answer(GUEST_GOODBYE)
 
 
 @router.message(Command("cancel"))
