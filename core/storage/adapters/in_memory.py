@@ -21,6 +21,7 @@ class InMemoryStorage:
     def __init__(self) -> None:
         self.clients: list[dict[str, Any]] = []
         self.admin_users: list[dict[str, Any]] = []
+        self.admin_settings: list[dict[str, Any]] = []
         self.questions: list[dict[str, Any]] = []
         self.sessions: list[dict[str, Any]] = []
         self.session_messages: list[dict[str, Any]] = []
@@ -66,6 +67,27 @@ class InMemoryStorage:
                 "created_at": self._now(),
             }
         )
+
+    # ───────────────────────────────────────── admin_settings ──
+    async def get_admin_settings(self, telegram_id: int) -> dict[str, Any] | None:
+        return next((s for s in self.admin_settings if s["telegram_id"] == telegram_id), None)
+
+    async def upsert_admin_settings(
+        self, *, telegram_id: int, patch: dict[str, Any]
+    ) -> dict[str, Any]:
+        existing = next((s for s in self.admin_settings if s["telegram_id"] == telegram_id), None)
+        if existing is not None:
+            existing.update(patch)
+            existing["updated_at"] = self._now()
+            return existing
+        row = {
+            "telegram_id": telegram_id,
+            "created_at": self._now(),
+            "updated_at": self._now(),
+            **patch,
+        }
+        self.admin_settings.append(row)
+        return row
 
     # ───────────────────────────────────────── questions ──
     async def list_questions(self, *, active_only: bool) -> list[dict[str, Any]]:

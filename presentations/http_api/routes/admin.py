@@ -18,10 +18,13 @@ from core.services.analytics import (
     topic_histogram,
 )
 from core.services.questions import get_question_expected_type, list_questions
+from core.services.settings import get_admin_settings, update_admin_settings
 from presentations.http_api.auth.jwt import issue_token
 from presentations.http_api.auth.telegram_webapp import validate_initdata
 from presentations.http_api.deps.auth import current_admin
 from presentations.http_api.schemas.admin import (
+    AdminSettingsResponse,
+    AdminSettingsUpdate,
     AskRequest,
     AskResponse,
     AuthRequest,
@@ -250,3 +253,32 @@ async def ask(
         interpretation=answer.interpretation,
         clarification_needed=answer.clarification_needed,
     )
+
+
+# --------------------------------------------------------------------------- #
+# GET /admin/settings  +  PUT /admin/settings
+
+
+@router.get("/settings", response_model=AdminSettingsResponse)
+async def get_settings(
+    admin_id: Annotated[int, Depends(current_admin)],
+) -> AdminSettingsResponse:
+    s = await get_admin_settings(admin_id)
+    return AdminSettingsResponse(**s)
+
+
+@router.put("/settings", response_model=AdminSettingsResponse)
+async def put_settings(
+    body: AdminSettingsUpdate,
+    admin_id: Annotated[int, Depends(current_admin)],
+) -> AdminSettingsResponse:
+    try:
+        s = await update_admin_settings(
+            admin_id,
+            theme=body.theme,
+            language=body.language,
+            notifications_enabled=body.notifications_enabled,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return AdminSettingsResponse(**s)
