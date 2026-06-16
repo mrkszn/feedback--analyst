@@ -97,6 +97,28 @@ class SupabaseStorage:
             payload["invited_by"] = invited_by
         await asyncio.to_thread(lambda: db.table("admin_users").insert(payload).execute())
 
+    # ───────────────────────────────────────── admin_settings ──
+    async def get_admin_settings(self, telegram_id: int) -> dict[str, Any] | None:
+        db = self._db
+        resp = await asyncio.to_thread(
+            lambda: (
+                db.table("admin_settings")
+                .select("*")
+                .eq("telegram_id", telegram_id)
+                .limit(1)
+                .execute()
+            )
+        )
+        return _first_or_none(resp)
+
+    async def upsert_admin_settings(
+        self, *, telegram_id: int, patch: dict[str, Any]
+    ) -> dict[str, Any]:
+        db = self._db
+        payload = {"telegram_id": telegram_id, **patch}
+        resp = await asyncio.to_thread(lambda: db.table("admin_settings").upsert(payload).execute())
+        return _first(resp)
+
     # ───────────────────────────────────────── questions ──
     async def list_questions(self, *, active_only: bool) -> list[dict[str, Any]]:
         db = self._db
