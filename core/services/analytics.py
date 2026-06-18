@@ -90,6 +90,14 @@ class CategoricalDistribution(TypedDict):
     enum_values: list[str] | None  # canonical list from questions.enum_values
 
 
+class ClientListItem(TypedDict):
+    telegram_id: int
+    name: str | None
+    sessions_count: int
+    last_session_at: str | None
+    avg_sentiment: float | None
+
+
 # --------------------------------------------------------------------------- #
 # helpers
 
@@ -580,3 +588,241 @@ async def client_profile(
             "top_topics": top_topics[:5],
         },
     )
+
+
+# --------------------------------------------------------------------------- #
+# client drill-down lists (topic / category / filter / search)
+
+
+def _summary_dict(row: dict[str, Any]) -> dict[str, Any]:
+    s = row.get("feedback_summary")
+    return s if isinstance(s, dict) else {}
+
+
+def _topic_set(summary: dict[str, Any]) -> set[str]:
+    topics = summary.get("topics") or []
+    if not isinstance(topics, list):
+        return set()
+    return {t.strip().lower() for t in topics if isinstance(t, str) and t.strip()}
+
+
+def _enrich_client_items(
+    sessions_by_client: dict[int, list[dict[str, Any]]],
+    names: dict[int, str | None],
+) -> list[ClientListItem]:
+    """Build compact list rows from each client's (in-scope) session rows."""
+    items: list[ClientListItem] = []
+    for cid, sess in sessions_by_client.items():
+        ordered = sorted(sess, key=lambda s: str(s.get("started_at") or ""), reverse=True)
+        scores = [
+            _SENTIMENT_SCORE[str(_summary_dict(s).get("sentiment"))]
+            for s in sess
+            if str(_summary_dict(s).get("sentiment")) in _SENTIMENT_SCORE
+        ]
+        last_at = (
+            str(ordered[0]["started_at"]) if ordered and ordered[0].get("started_at") else None
+        )
+        items.append(
+            ClientListItem(
+                telegram_id=cid,
+                name=names.get(cid),
+                sessions_count=len(sess),
+                last_session_at=last_at,
+                avg_sentiment=(sum(scores) / len(scores)) if scores else None,
+            )
+        )
+    items.sort(key=lambda x: (x["sessions_count"], x["telegram_id"]), reverse=True)
+    return items
+
+
+async def _paged_client_items(
+    store: StorageAdapter,
+    sessions_by_client: dict[int, list[dict[str, Any]]],
+    limit: int,
+    offset: int,
+) -> list[ClientListItem]:
+    name_rows = await store.fetch_clients_by_ids(
+        telegram_ids=list(sessions_by_client.keys()),
+        columns="telegram_id, name",
+    )
+    names = {int(r["telegram_id"]): r.get("name") for r in name_rows}
+    items = _enrich_client_items(sessions_by_client, names)
+    return items[offset : offset + limit]
+
+
+async def list_clients_by_topic(
+    topic: str,
+    date_from: datetime,
+    date_to: datetime,
+    *,
+    sentiment: Sentiment | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    storage: StorageAdapter | None = None,
+    db: Client | None = None,
+) -> list[ClientListItem]:
+    """Clients with at least one in-window session tagged with `topic`."""
+    if not topic.strip():
+        raise ValueError("topic must not be empty")
+    if date_from > date_to:
+        raise ValueError("date_from must be <= date_to")
+    if sentiment is not None and sentiment not in _SENTIMENT_SCORE:
+        raise ValueError(f"unknown sentiment {sentiment!r}")
+
+    store = _storage(storage, db)
+    rows = await store.fetch_sessions_with_feedback(
+        date_from=date_from.isoformat(),
+        date_to=date_to.isoformat(),
+        columns="id, client_id, started_at, feedback_summary",
+    )
+    needle = topic.strip().lower()
+
+    by_client: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for r in rows:
+        cid = r.get("client_id")
+        if cid is None:
+            continue
+        summary = _summary_dict(r)
+        if sentiment is not None and summary.get("sentiment") != sentiment:
+            continue
+        if needle in _topic_set(summary):
+            by_client[int(cid)].append(r)
+
+    return await _paged_client_items(store, by_client, limit, offset)
+
+
+async def list_clients_by_enum_answer(
+    metric_key: str,
+    value: str,
+    date_from: datetime,
+    date_to: datetime,
+    *,
+    limit: int = 50,
+    offset: int = 0,
+    storage: StorageAdapter | None = None,
+    db: Client | None = None,
+) -> list[ClientListItem]:
+    """Clients who answered the `metric_key` question with `value` in window."""
+    if not metric_key.strip():
+        raise ValueError("metric_key must not be empty")
+    if not value.strip():
+        raise ValueError("value must not be empty")
+    if date_from > date_to:
+        raise ValueError("date_from must be <= date_to")
+
+    store = _storage(storage, db)
+    question = await store.get_question_by_metric_key(metric_key)
+    if question is None:
+        raise LookupError(f"question with metric_key {metric_key!r} not found")
+
+    answers = await store.fetch_answers_for_question(
+        question_id=str(question["id"]),
+        date_from=date_from.isoformat(),
+        date_to=date_to.isoformat(),
+        columns="session_id, marked_value",
+    )
+    target = value.strip().lower()
+    session_ids = [
+        str(a["session_id"])
+        for a in answers
+        if a.get("session_id") is not None
+        and (_coerce_categorical(a.get("marked_value")) or "").lower() == target
+    ]
+    if not session_ids:
+        return []
+
+    sessions = await store.fetch_sessions_by_ids(
+        session_ids=session_ids,
+        columns="id, client_id, started_at, feedback_summary",
+    )
+    by_client: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for s in sessions:
+        cid = s.get("client_id")
+        if cid is not None:
+            by_client[int(cid)].append(s)
+
+    return await _paged_client_items(store, by_client, limit, offset)
+
+
+async def filter_clients_by_topics(
+    topics: list[str],
+    *,
+    match: Literal["and", "or"] = "and",
+    date_from: datetime,
+    date_to: datetime,
+    sentiment: Sentiment | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    storage: StorageAdapter | None = None,
+    db: Client | None = None,
+) -> list[ClientListItem]:
+    """Clients matching selected topics. `and` = intersection (narrows the
+    set), `or` = union. Membership is across the client's in-window sessions."""
+    cleaned = [t.strip().lower() for t in topics if t.strip()]
+    if not cleaned:
+        raise ValueError("topics must not be empty")
+    if match not in ("and", "or"):
+        raise ValueError(f"unknown match {match!r}")
+    if date_from > date_to:
+        raise ValueError("date_from must be <= date_to")
+
+    store = _storage(storage, db)
+    rows = await store.fetch_sessions_with_feedback(
+        date_from=date_from.isoformat(),
+        date_to=date_to.isoformat(),
+        columns="id, client_id, started_at, feedback_summary",
+    )
+
+    by_client: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    seen_topics: dict[int, set[str]] = defaultdict(set)
+    for r in rows:
+        cid = r.get("client_id")
+        if cid is None:
+            continue
+        summary = _summary_dict(r)
+        if sentiment is not None and summary.get("sentiment") != sentiment:
+            continue
+        cid_i = int(cid)
+        by_client[cid_i].append(r)
+        seen_topics[cid_i] |= _topic_set(summary)
+
+    want = set(cleaned)
+    matched: dict[int, list[dict[str, Any]]] = {}
+    for cid_i, sess in by_client.items():
+        seen = seen_topics[cid_i]
+        ok = (want <= seen) if match == "and" else bool(want & seen)
+        if ok:
+            matched[cid_i] = sess
+
+    return await _paged_client_items(store, matched, limit, offset)
+
+
+async def search_clients(
+    query: str,
+    *,
+    limit: int = 50,
+    storage: StorageAdapter | None = None,
+    db: Client | None = None,
+) -> list[ClientListItem]:
+    """Look up clients by telegram_id (all-digits) or name substring."""
+    q = query.strip()
+    if not q:
+        raise ValueError("query must not be empty")
+
+    store = _storage(storage, db)
+    if q.isdigit():
+        row = await store.get_client(int(q))
+        client_rows = [row] if row is not None else []
+    else:
+        client_rows = await store.search_clients_by_name(pattern=f"%{q}%", limit=limit)
+
+    by_client: dict[int, list[dict[str, Any]]] = {}
+    names: dict[int, str | None] = {}
+    for c in client_rows[:limit]:
+        cid = int(c["telegram_id"])
+        names[cid] = c.get("name")
+        by_client[cid] = await store.fetch_sessions_for_client(
+            client_id=cid,
+            columns="started_at, feedback_summary",
+        )
+    return _enrich_client_items(by_client, names)
