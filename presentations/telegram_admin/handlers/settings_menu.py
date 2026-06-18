@@ -83,10 +83,7 @@ def settings_text(settings: dict[str, Any]) -> str:
     theme = THEME_LABELS.get(settings["theme"], settings["theme"])
     language = LANGUAGE_LABELS.get(settings["language"], settings["language"])
     return (
-        "⚙️ Настройки\n\n"
-        f"Тема приложения: {theme}\n"
-        f"Язык: {language}\n\n"
-        "Выберите новый вариант ниже."
+        f"⚙️ Настройки\n\nТема приложения: {theme}\nЯзык: {language}\n\nВыберите новый вариант ниже."
     )
 
 
