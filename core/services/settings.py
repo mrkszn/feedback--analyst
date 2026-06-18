@@ -16,11 +16,11 @@ from core.storage.adapters.supabase import SupabaseStorage
 from core.storage.protocol import StorageAdapter
 
 VALID_THEMES = ("light", "dark", "system")
-VALID_LANGUAGES = ("ru", "en")
+VALID_LANGUAGES = ("uk", "en")
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     "theme": "system",
-    "language": "ru",
+    "language": "uk",
     "notifications_enabled": True,
 }
 

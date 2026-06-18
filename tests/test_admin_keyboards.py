@@ -70,7 +70,7 @@ async def test_button_admins_returns_invite_hint() -> None:
     assert "/invite_admin" in text
 
 
-async def test_button_settings_shows_theme_and_language() -> None:
+async def test_button_settings_shows_language_only() -> None:
     message = MagicMock()
     message.from_user = MagicMock(id=5)
     message.answer = AsyncMock()
@@ -91,19 +91,23 @@ async def test_button_settings_shows_theme_and_language() -> None:
     message.answer.assert_awaited_once()
     args, kwargs = message.answer.await_args
     assert "Настройки" in args[0]
-    assert "Тема приложения: Тёмная" in args[0]
-    assert "Язык: English" in args[0]
-    assert isinstance(kwargs.get("reply_markup"), InlineKeyboardMarkup)
+    assert "Язык интерфейса: English" in args[0]
+    # Theme switching lives in the Mini App UI now — the bot menu is language-only.
+    assert "Тема" not in args[0]
+    kb = kwargs.get("reply_markup")
+    assert isinstance(kb, InlineKeyboardMarkup)
+    assert len(kb.inline_keyboard) == 1
+    assert [b.text for b in kb.inline_keyboard[0]] == ["Українська", "✓ English"]
 
 
 async def test_settings_callback_updates_language() -> None:
     callback = MagicMock()
     callback.from_user = MagicMock(id=5)
-    callback.data = "settings:language:ru"
+    callback.data = "settings:language:uk"
     callback.message = None
     callback.answer = AsyncMock()
 
-    fake = {"theme": "dark", "language": "ru", "notifications_enabled": True}
+    fake = {"theme": "dark", "language": "uk", "notifications_enabled": True}
     with (
         patch(
             "presentations.telegram_admin.handlers.settings_menu.is_admin",
@@ -116,7 +120,7 @@ async def test_settings_callback_updates_language() -> None:
     ):
         await admin_settings_update(callback)
 
-    update.assert_awaited_once_with(5, language="ru")
+    update.assert_awaited_once_with(5, language="uk")
     callback.answer.assert_awaited_once_with("Сохранено")
 
 

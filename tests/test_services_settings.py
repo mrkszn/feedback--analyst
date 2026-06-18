@@ -58,6 +58,12 @@ async def test_update_rejects_invalid_theme() -> None:
     assert mem.admin_settings == []
 
 
+async def test_update_accepts_uk_language() -> None:
+    mem = _mem()
+    result = await update_admin_settings(7, language="uk", storage=mem)
+    assert result["language"] == "uk"
+
+
 async def test_update_rejects_invalid_language() -> None:
     mem = _mem()
     with pytest.raises(ValueError, match="invalid language"):

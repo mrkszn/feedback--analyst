@@ -148,7 +148,7 @@ class AskResponse(BaseModel):
 
 
 Theme = Literal["light", "dark", "system"]
-Language = Literal["ru", "en"]
+Language = Literal["uk", "en"]
 
 
 class AdminSettingsResponse(BaseModel):

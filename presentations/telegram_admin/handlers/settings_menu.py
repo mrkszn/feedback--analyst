@@ -12,14 +12,8 @@ from presentations.telegram_admin.keyboards import BTN_SETTINGS
 
 router = Router(name="admin_settings")
 
-THEME_LABELS = {
-    "system": "Системная",
-    "light": "Светлая",
-    "dark": "Тёмная",
-}
-
 LANGUAGE_LABELS = {
-    "ru": "Русский",
+    "uk": "Українська",
     "en": "English",
 }
 
@@ -47,28 +41,13 @@ def _selected(label: str, selected: bool) -> str:
 
 
 def settings_keyboard(settings: dict[str, Any]) -> InlineKeyboardMarkup:
-    theme = settings["theme"]
     language = settings["language"]
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=_selected(THEME_LABELS["system"], theme == "system"),
-                    callback_data="settings:theme:system",
-                ),
-                InlineKeyboardButton(
-                    text=_selected(THEME_LABELS["light"], theme == "light"),
-                    callback_data="settings:theme:light",
-                ),
-                InlineKeyboardButton(
-                    text=_selected(THEME_LABELS["dark"], theme == "dark"),
-                    callback_data="settings:theme:dark",
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    text=_selected(LANGUAGE_LABELS["ru"], language == "ru"),
-                    callback_data="settings:language:ru",
+                    text=_selected(LANGUAGE_LABELS["uk"], language == "uk"),
+                    callback_data="settings:language:uk",
                 ),
                 InlineKeyboardButton(
                     text=_selected(LANGUAGE_LABELS["en"], language == "en"),
@@ -80,11 +59,8 @@ def settings_keyboard(settings: dict[str, Any]) -> InlineKeyboardMarkup:
 
 
 def settings_text(settings: dict[str, Any]) -> str:
-    theme = THEME_LABELS.get(settings["theme"], settings["theme"])
     language = LANGUAGE_LABELS.get(settings["language"], settings["language"])
-    return (
-        f"⚙️ Настройки\n\nТема приложения: {theme}\nЯзык: {language}\n\nВыберите новый вариант ниже."
-    )
+    return f"⚙️ Настройки\n\nЯзык интерфейса: {language}\n\nВыберите язык ниже."
 
 
 @router.message(F.text == BTN_SETTINGS)
@@ -117,14 +93,11 @@ async def admin_settings_update(callback: CallbackQuery) -> None:
         return
 
     _, field, value = parts
+    if field != "language":
+        await callback.answer("Не понял настройку", show_alert=True)
+        return
     try:
-        if field == "theme":
-            settings = await update_admin_settings(user.id, theme=value)
-        elif field == "language":
-            settings = await update_admin_settings(user.id, language=value)
-        else:
-            await callback.answer("Не понял настройку", show_alert=True)
-            return
+        settings = await update_admin_settings(user.id, language=value)
     except ValueError as exc:
         await callback.answer(str(exc), show_alert=True)
         return

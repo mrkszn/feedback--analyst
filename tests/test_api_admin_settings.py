@@ -65,7 +65,7 @@ def test_get_settings_returns_effective(client: TestClient) -> None:
 
 def test_put_settings_updates(client: TestClient) -> None:
     token = _admin_token(7)
-    fake = {"theme": "dark", "language": "ru", "notifications_enabled": True}
+    fake = {"theme": "dark", "language": "uk", "notifications_enabled": True}
     with (
         patch("presentations.http_api.deps.auth.is_admin", return_value=True),
         patch("presentations.http_api.routes.admin.update_admin_settings", return_value=fake) as m,
