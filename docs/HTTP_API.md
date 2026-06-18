@@ -83,9 +83,9 @@ curl -X PUT http://localhost:8000/admin/settings \
 ```
 
 `GET/PUT /admin/settings` — на текущего админа (telegram_id берётся из JWT,
-тело параметра не несёт). `theme ∈ {light, dark, system}`, `language ∈ {ru, en}`,
+тело параметра не несёт). `theme ∈ {light, dark, system}`, `language ∈ {uk, en}`,
 `notifications_enabled: bool`. Отсутствие строки в `admin_settings` = дефолты
-(`system` / `ru` / `true`); PUT — partial update, незаданные поля не трогаются.
+(`system` / `uk` / `true`); PUT — partial update, незаданные поля не трогаются.
 
 ## Out of scope сейчас
 
