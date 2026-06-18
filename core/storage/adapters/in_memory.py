@@ -47,6 +47,17 @@ class InMemoryStorage:
         self.clients.append(row)
         return row
 
+    async def search_clients_by_name(self, *, pattern: str, limit: int) -> list[dict[str, Any]]:
+        needle = pattern.strip("%").lower()
+        out = [c for c in self.clients if needle in str(c.get("name") or "").lower()]
+        return out[:limit]
+
+    async def fetch_clients_by_ids(
+        self, *, telegram_ids: list[int], columns: str
+    ) -> list[dict[str, Any]]:
+        ids = set(telegram_ids)
+        return [c for c in self.clients if c.get("telegram_id") in ids]
+
     # ───────────────────────────────────────── admin_users ──
     async def is_admin(self, telegram_id: int) -> bool:
         return any(a["telegram_id"] == telegram_id for a in self.admin_users)
@@ -179,6 +190,12 @@ class InMemoryStorage:
         }
         self.session_messages.append(row)
         return row
+
+    async def fetch_session_messages(
+        self, *, session_id: str | UUID, columns: str
+    ) -> list[dict[str, Any]]:
+        rows = [m for m in self.session_messages if str(m.get("session_id")) == str(session_id)]
+        return sorted(rows, key=lambda m: str(m.get("created_at") or ""))
 
     def _sessions_in_window(self, date_from: str, date_to: str) -> list[dict[str, Any]]:
         return [s for s in self.sessions if date_from <= str(s.get("started_at") or "") <= date_to]

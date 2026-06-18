@@ -28,6 +28,15 @@ class StorageAdapter(Protocol):
     # ─── clients ───
     async def get_client(self, telegram_id: int) -> dict[str, Any] | None: ...
     async def insert_client(self, *, telegram_id: int, name: str | None) -> dict[str, Any]: ...
+    async def search_clients_by_name(self, *, pattern: str, limit: int) -> list[dict[str, Any]]:
+        """Clients whose name matches the ilike `pattern` (caller wraps `%`)."""
+        ...
+
+    async def fetch_clients_by_ids(
+        self, *, telegram_ids: list[int], columns: str
+    ) -> list[dict[str, Any]]:
+        """Clients for the given telegram_ids (batch name/metadata lookup)."""
+        ...
 
     # ─── admin_users ───
     async def is_admin(self, telegram_id: int) -> bool: ...
@@ -64,6 +73,12 @@ class StorageAdapter(Protocol):
     async def insert_session_message(
         self, *, session_id: str | UUID, role: Role, content: str
     ) -> dict[str, Any]: ...
+    async def fetch_session_messages(
+        self, *, session_id: str | UUID, columns: str
+    ) -> list[dict[str, Any]]:
+        """Transcript rows for one session, ordered by created_at asc."""
+        ...
+
     async def fetch_sessions_with_feedback(
         self, *, date_from: str, date_to: str, columns: str
     ) -> list[dict[str, Any]]:
