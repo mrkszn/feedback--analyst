@@ -4,27 +4,53 @@
 
 ## Как применить
 
-### Вариант 1 — Supabase Studio (для local-dev)
+### Вариант 1 — CI workflow «DB migrations» (основной способ для прода) ⭐
+
+Миграции на прод накатываются **вручную из GitHub Actions**, не на каждый push
+(схемные изменения слишком рискованны для авто-деплоя):
+
+1. GitHub → вкладка **Actions** → workflow **DB migrations** → **Run workflow**.
+2. Сначала прогони с `dry_run = true` — покажет, какие файлы будут применены,
+   ничего не меняя.
+3. Доволен списком → запусти ещё раз с `dry_run = false`.
+
+Workflow (`.github/workflows/migrate.yml`) дёргает `scripts/apply_migrations.sh`
+с секретом `SUPABASE_DB_URL` (см. ниже).
+
+### Вариант 2 — локально тем же раннером
+
+```bash
+# DSN из Supabase Dashboard → Connect → Session pooler (порт 5432)
+export SUPABASE_DB_URL='postgresql://postgres.<ref>:<pwd>@<host>.pooler.supabase.com:5432/postgres'
+
+scripts/apply_migrations.sh --dry-run   # превью
+scripts/apply_migrations.sh             # применить
+```
+
+### Вариант 3 — Supabase Studio (для local-dev / разовых правок)
 1. Открой проект в [Supabase Studio](https://supabase.com/dashboard).
 2. SQL Editor → `New query`.
 3. Скопируй содержимое нужного файла → `Run`.
 4. Проверь Tables: должны появиться все таблицы из миграции.
 
-### Вариант 2 — Supabase CLI (когда настроишь)
-```bash
-# Линковка с проектом (один раз)
-supabase link --project-ref <YOUR_PROJECT_REF>
+## Как раннер отслеживает применённое
 
-# Применение всех новых миграций
-supabase db push
-```
+`scripts/apply_migrations.sh` ведёт таблицу `public.app_migrations` (одна строка
+на имя файла) и применяет только те `NNNN_*.sql`, которых там ещё нет, в порядке
+номеров. Каждый файл — в отдельной транзакции с `ON_ERROR_STOP`; первая ошибка
+прерывает прогон. Раннер **не** использует Supabase CLI и `supabase/migrations/`
+— остаёмся на конвенции `core/storage/migrations/NNNN_name.sql`.
 
-CLI читает файлы из `supabase/migrations/`. У нас они в `db/migrations/`, поэтому либо настрой `supabase/config.toml` указывать на нашу папку, либо положи symlink `supabase/migrations → ../db/migrations`.
+Так как каждая миграция идемпотентна (`create … if not exists`/`create or
+replace`), первый прогон против уже поднятой БД безопасен: существующие объекты
+просто пере-объявляются и записываются в `app_migrations`, данные не трогаются.
 
-### Вариант 3 — Прямой psql / asyncpg (когда будет `SUPABASE_DB_URL`)
-```bash
-psql "$SUPABASE_DB_URL" -f db/migrations/0001_init.sql
-```
+### Секрет `SUPABASE_DB_URL`
+
+Нужен для Варианта 1 (GitHub Secrets → Actions) и Варианта 2 (env локально).
+Бери **Session pooler**-строку (порт `5432`), не transaction-pooler (`6543`):
+DDL и функции требуют session-режим. GitHub-раннеры ходят по IPv4, поэтому
+прямой `db.<ref>.supabase.co` (IPv6-only) не подойдёт — только pooler.
 
 ## Порядок и инварианты
 

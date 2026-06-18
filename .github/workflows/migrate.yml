@@ -1,0 +1,42 @@
+name: DB migrations
+
+# Manual-only. Schema changes are applied on demand, never automatically on
+# push — run from the Actions tab → "DB migrations" → "Run workflow". Use the
+# dry-run input first to preview which migrations would be applied.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Preview pending migrations without applying them"
+        type: boolean
+        default: false
+
+concurrency:
+  # Never let two migration runs touch the database at once.
+  group: db-migrate
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: apply pending migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Apply migrations
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "::error::SUPABASE_DB_URL secret is not set (Settings → Secrets → Actions)"
+            exit 1
+          fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            bash scripts/apply_migrations.sh --dry-run
+          else
+            bash scripts/apply_migrations.sh
+          fi
