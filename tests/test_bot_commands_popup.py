@@ -43,7 +43,7 @@ def test_admin_commands_include_analytics_surface() -> None:
     Старые /ask /insights /metric /find /clients убраны до редизайна агента.
     """
     cmds = _commands_dict(ADMIN_COMMANDS)
-    for required in ("statistics", "topics"):
+    for required in ("statistics", "topics", "settings"):
         assert required in cmds, f"admin popup menu missing /{required}"
     for removed in ("ask", "insights", "metric", "find", "clients"):
         assert removed not in cmds, f"/{removed} should be removed from popup"
