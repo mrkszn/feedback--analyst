@@ -3,6 +3,7 @@
 DI: `storage: StorageAdapter | None` (new) + `db: Client | None` (back-compat).
 """
 
+import json
 from datetime import UTC, datetime
 from typing import Any, Literal, TypedDict, cast
 from uuid import UUID
@@ -42,7 +43,7 @@ class SessionMessage(TypedDict):
 class SessionAnswer(TypedDict):
     question_text: str
     answer_text: str | None
-    marked_value: Any
+    marked_value: str | None
 
 
 class SessionDetail(TypedDict):
@@ -102,6 +103,33 @@ def _list_item(row: dict[str, Any], names: dict[int, str | None]) -> SessionList
         topics=_topics_of(row),
         source=row.get("feedback_source"),
     )
+
+
+_MARKED_VALUE_KEYS = ("value", "label", "text", "name", "title")
+
+
+def _coerce_marked_value(value: Any) -> str | None:
+    """Flatten a JSONB `marked_value` to a scalar string for the API.
+
+    `marked_value` may be None, a scalar, a `{"value": ...}`-style dict, or a
+    list. The Mini App renders it as a React child, so it must never be an
+    object: None stays None, scalars stringify, a dict yields its first scalar
+    among value/label/text/name/title (else a JSON fallback), and a list joins.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str | int | float | bool):
+        return str(value)
+    if isinstance(value, dict):
+        for key in _MARKED_VALUE_KEYS:
+            inner = value.get(key)
+            if isinstance(inner, str | int | float | bool):
+                return str(inner)
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    if isinstance(value, list):
+        parts = [_coerce_marked_value(v) for v in value]
+        return ", ".join(p for p in parts if p is not None)
+    return str(value)
 
 
 async def start_session(
@@ -253,7 +281,7 @@ async def session_detail(
             SessionAnswer(
                 question_text=q_text_by_id.get(str(a.get("question_id")), ""),
                 answer_text=a.get("answer_text"),
-                marked_value=a.get("marked_value"),
+                marked_value=_coerce_marked_value(a.get("marked_value")),
             )
             for a in raw_answers
         ]
