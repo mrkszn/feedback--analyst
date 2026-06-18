@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Annotated
+from datetime import UTC, datetime
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -13,11 +13,16 @@ from core.services.analytics import (
     aggregate_metric,
     categorical_distribution,
     client_profile,
+    filter_clients_by_topics,
+    list_clients_by_enum_answer,
+    list_clients_by_topic,
+    search_clients,
     semantic_search,
     summary_overview,
     topic_histogram,
 )
 from core.services.questions import get_question_expected_type, list_questions
+from core.services.sessions import list_sessions, session_detail
 from core.services.settings import get_admin_settings, update_admin_settings
 from presentations.http_api.auth.jwt import issue_token
 from presentations.http_api.auth.telegram_webapp import validate_initdata
@@ -31,6 +36,7 @@ from presentations.http_api.schemas.admin import (
     AuthResponse,
     CategoryCountOut,
     ClientProfileResponse,
+    ClientsResponse,
     MetricPointOut,
     MetricsResponse,
     OverviewResponse,
@@ -40,6 +46,8 @@ from presentations.http_api.schemas.admin import (
     SemanticSearchRequest,
     SemanticSearchResponse,
     Sentiment,
+    SessionDetailResponse,
+    SessionsResponse,
     TopicCountOut,
     TopicsResponse,
 )
@@ -231,6 +239,124 @@ async def client(
         recent_cards=p["recent_cards"],
         top_topics=[TopicCountOut(**t) for t in p["top_topics"]],
     )
+
+
+# --------------------------------------------------------------------------- #
+# GET /admin/sessions  +  GET /admin/sessions/{session_id}
+
+
+@router.get("/sessions", response_model=SessionsResponse)
+async def sessions_list(
+    date_from: Annotated[datetime, Query(description="ISO 8601 datetime")],
+    date_to: Annotated[datetime, Query(description="ISO 8601 datetime")],
+    _admin_id: Annotated[int, Depends(current_admin)],
+    sentiment: Annotated[Sentiment | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> SessionsResponse:
+    if date_from > date_to:
+        raise HTTPException(status_code=400, detail="date_from must be <= date_to")
+    rows = await list_sessions(date_from, date_to, sentiment=sentiment, limit=limit, offset=offset)
+    return SessionsResponse.model_validate({"sessions": rows})
+
+
+@router.get("/sessions/{session_id}", response_model=SessionDetailResponse)
+async def get_session_detail(
+    session_id: str,
+    _admin_id: Annotated[int, Depends(current_admin)],
+) -> SessionDetailResponse:
+    try:
+        detail = await session_detail(session_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return SessionDetailResponse.model_validate(detail)
+
+
+# --------------------------------------------------------------------------- #
+# GET /admin/topics/{topic}/clients
+
+
+@router.get("/topics/{topic}/clients", response_model=ClientsResponse)
+async def topic_clients(
+    topic: str,
+    date_from: Annotated[datetime, Query()],
+    date_to: Annotated[datetime, Query()],
+    _admin_id: Annotated[int, Depends(current_admin)],
+    sentiment: Annotated[Sentiment | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ClientsResponse:
+    if date_from > date_to:
+        raise HTTPException(status_code=400, detail="date_from must be <= date_to")
+    rows = await list_clients_by_topic(
+        topic, date_from, date_to, sentiment=sentiment, limit=limit, offset=offset
+    )
+    return ClientsResponse.model_validate({"clients": rows})
+
+
+# --------------------------------------------------------------------------- #
+# GET /admin/metrics/{metric_key}/clients
+
+
+@router.get("/metrics/{metric_key}/clients", response_model=ClientsResponse)
+async def metric_clients(
+    metric_key: str,
+    value: Annotated[str, Query(min_length=1)],
+    date_from: Annotated[datetime, Query()],
+    date_to: Annotated[datetime, Query()],
+    _admin_id: Annotated[int, Depends(current_admin)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ClientsResponse:
+    if date_from > date_to:
+        raise HTTPException(status_code=400, detail="date_from must be <= date_to")
+    try:
+        rows = await list_clients_by_enum_answer(
+            metric_key, value, date_from, date_to, limit=limit, offset=offset
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return ClientsResponse.model_validate({"clients": rows})
+
+
+# --------------------------------------------------------------------------- #
+# GET /admin/clients  (search by name/id or filter by topics)
+
+
+@router.get("/clients", response_model=ClientsResponse)
+async def clients_list(
+    _admin_id: Annotated[int, Depends(current_admin)],
+    query: Annotated[str | None, Query()] = None,
+    topics: Annotated[list[str] | None, Query()] = None,
+    match: Annotated[Literal["and", "or"], Query()] = "and",
+    sentiment: Annotated[Sentiment | None, Query()] = None,
+    date_from: Annotated[datetime | None, Query()] = None,
+    date_to: Annotated[datetime | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ClientsResponse:
+    if not query and not topics:
+        raise HTTPException(status_code=400, detail="provide `query` or `topics`")
+    if query and topics:
+        raise HTTPException(status_code=400, detail="use either `query` or `topics`, not both")
+
+    if query:
+        rows = await search_clients(query, limit=limit)
+    else:
+        window_from = date_from or datetime(2000, 1, 1, tzinfo=UTC)
+        window_to = date_to or datetime.now(UTC)
+        if window_from > window_to:
+            raise HTTPException(status_code=400, detail="date_from must be <= date_to")
+        rows = await filter_clients_by_topics(
+            topics or [],
+            match=match,
+            date_from=window_from,
+            date_to=window_to,
+            sentiment=sentiment,
+            limit=limit,
+            offset=offset,
+        )
+    return ClientsResponse.model_validate({"clients": rows})
 
 
 # --------------------------------------------------------------------------- #

@@ -80,12 +80,49 @@ curl -X PUT http://localhost:8000/admin/settings \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $JWT" \
   -d '{"theme": "dark", "language": "en", "notifications_enabled": false}'
+
+# 10) Sessions — список сессий за период (+ optional sentiment, пагинация)
+curl 'http://localhost:8000/admin/sessions?date_from=2026-01-01&date_to=2026-01-31&sentiment=negative&limit=50&offset=0' \
+  -H "Authorization: Bearer $JWT"
+
+# 11) Session detail — полный таймлайн сессии (transcript + answers + card)
+curl 'http://localhost:8000/admin/sessions/<session_id>' \
+  -H "Authorization: Bearer $JWT"
+
+# 12) Topic → clients — клиенты по теме
+curl 'http://localhost:8000/admin/topics/сервис/clients?date_from=2026-01-01&date_to=2026-01-31' \
+  -H "Authorization: Bearer $JWT"
+
+# 13) Category → clients — клиенты по значению enum-метрики
+curl 'http://localhost:8000/admin/metrics/visit_recency/clients?value=Больше%20года&date_from=2026-01-01&date_to=2026-01-31' \
+  -H "Authorization: Bearer $JWT"
+
+# 14) Clients — поиск по имени/id ИЛИ мультифильтр по темам
+curl 'http://localhost:8000/admin/clients?query=Alice' -H "Authorization: Bearer $JWT"
+curl 'http://localhost:8000/admin/clients?topics=сервис&topics=еда&match=and' -H "Authorization: Bearer $JWT"
 ```
 
 `GET/PUT /admin/settings` — на текущего админа (telegram_id берётся из JWT,
 тело параметра не несёт). `theme ∈ {light, dark, system}`, `language ∈ {uk, en}`,
 `notifications_enabled: bool`. Отсутствие строки в `admin_settings` = дефолты
 (`system` / `uk` / `true`); PUT — partial update, незаданные поля не трогаются.
+
+**Drill-down (10–14)** — навигация вглубь агрегатов для Mini App:
+
+- `GET /admin/sessions` → `{sessions: [{id, client_id, client_name, started_at,
+  ended_at, sentiment, topics[], source}]}`. `sentiment ∈ {positive, neutral,
+  negative}` (optional), пагинация `limit` (1..200, def 50) + `offset`.
+- `GET /admin/sessions/{id}` → то же + `summary, messages[] (role/content/
+  created_at), answers[] (question_text/answer_text/marked_value), card_summary`
+  — всё, что произошло в сессии. 404, если сессии нет.
+- `GET /admin/topics/{topic}/clients` и
+  `GET /admin/metrics/{metric_key}/clients?value=…` →
+  `{clients: [{telegram_id, name, sessions_count, last_session_at,
+  avg_sentiment}]}`. Деталь клиента — `GET /admin/clients/{telegram_id}` (#6).
+  Category-эндпоинт отдаёт 404 на несуществующий `metric_key`.
+- `GET /admin/clients` — `?query=` (имя или telegram_id) **или**
+  `?topics=a&topics=b&match=and|or` (мультифильтр; `and` = пересечение, сужает;
+  default `and`). Ровно один из `query`/`topics` обязателен, иначе 400.
 
 ## Out of scope сейчас
 

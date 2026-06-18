@@ -127,6 +127,68 @@ class ClientProfileResponse(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
+# sessions drill-down
+
+
+class SessionListItem(BaseModel):
+    id: str
+    client_id: int | None
+    client_name: str | None
+    started_at: str | None
+    ended_at: str | None
+    sentiment: str | None
+    topics: list[str]
+    source: str | None
+
+
+class SessionsResponse(BaseModel):
+    sessions: list[SessionListItem]
+
+
+class SessionMessageOut(BaseModel):
+    role: str
+    content: str
+    created_at: str | None
+
+
+class SessionAnswerOut(BaseModel):
+    question_text: str
+    answer_text: str | None
+    marked_value: Any = None
+
+
+class SessionDetailResponse(BaseModel):
+    id: str
+    client_id: int | None
+    client_name: str | None
+    started_at: str | None
+    ended_at: str | None
+    sentiment: str | None
+    topics: list[str]
+    source: str | None
+    summary: str | None
+    messages: list[SessionMessageOut]
+    answers: list[SessionAnswerOut]
+    card_summary: str | None
+
+
+# --------------------------------------------------------------------------- #
+# client lists (topic / category / search / filter drill-down)
+
+
+class ClientListItem(BaseModel):
+    telegram_id: int
+    name: str | None
+    sessions_count: int
+    last_session_at: str | None
+    avg_sentiment: float | None
+
+
+class ClientsResponse(BaseModel):
+    clients: list[ClientListItem]
+
+
+# --------------------------------------------------------------------------- #
 # ask
 
 

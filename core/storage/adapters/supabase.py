@@ -60,6 +60,30 @@ class SupabaseStorage:
         )
         return _first(resp)
 
+    async def search_clients_by_name(self, *, pattern: str, limit: int) -> list[dict[str, Any]]:
+        db = self._db
+        resp = await asyncio.to_thread(
+            lambda: (
+                db.table("clients")
+                .select("telegram_id, name, created_at")
+                .ilike("name", pattern)
+                .limit(limit)
+                .execute()
+            )
+        )
+        return _rows(resp)
+
+    async def fetch_clients_by_ids(
+        self, *, telegram_ids: list[int], columns: str
+    ) -> list[dict[str, Any]]:
+        if not telegram_ids:
+            return []
+        db = self._db
+        resp = await asyncio.to_thread(
+            lambda: db.table("clients").select(columns).in_("telegram_id", telegram_ids).execute()
+        )
+        return _rows(resp)
+
     # ───────────────────────────────────────── admin_users ──
     async def is_admin(self, telegram_id: int) -> bool:
         db = self._db
@@ -216,6 +240,21 @@ class SupabaseStorage:
             )
         )
         return _first(resp)
+
+    async def fetch_session_messages(
+        self, *, session_id: str | UUID, columns: str
+    ) -> list[dict[str, Any]]:
+        db = self._db
+        resp = await asyncio.to_thread(
+            lambda: (
+                db.table("session_messages")
+                .select(columns)
+                .eq("session_id", str(session_id))
+                .order("created_at", desc=False)
+                .execute()
+            )
+        )
+        return _rows(resp)
 
     async def fetch_sessions_with_feedback(
         self, *, date_from: str, date_to: str, columns: str
