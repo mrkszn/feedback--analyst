@@ -13,6 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from config import settings
+from core.storage.adapters.in_memory import InMemoryStorage
 from presentations.http_api.auth.jwt import issue_token
 from presentations.http_api.main import create_app
 
@@ -132,6 +133,56 @@ def test_session_detail_404(client: TestClient) -> None:
     ):
         resp = client.get("/admin/sessions/x", headers=_auth())
     assert resp.status_code == 404
+
+
+def test_session_detail_marked_value_is_scalar_string(client: TestClient) -> None:
+    """End-to-end: a dict-shaped marked_value in storage is flattened to a
+    scalar string in the JSON response (guards against React error #31). Runs
+    the real service against a seeded InMemoryStorage."""
+    mem = InMemoryStorage()
+    mem.clients.append(
+        {"telegram_id": 1, "name": "Alice", "created_at": "2026-06-01T00:00:00+00:00"}
+    )
+    mem.questions.append(
+        {
+            "id": "q1",
+            "text": "Как давно были у нас?",
+            "metric_key": "visit_recency",
+            "expected_type": "enum",
+            "enum_values": ["Больше года"],
+            "is_active": True,
+            "created_at": "2026-06-01T00:00:00+00:00",
+        }
+    )
+    mem.sessions.append(
+        {
+            "id": "s1",
+            "client_id": 1,
+            "started_at": "2026-06-10T12:00:00+00:00",
+            "ended_at": None,
+            "feedback_summary": {"summary": "ok", "sentiment": "positive", "topics": ["сервис"]},
+            "feedback_source": "text",
+        }
+    )
+    mem.session_answers.append(
+        {
+            "id": 1,
+            "session_id": "s1",
+            "question_id": "q1",
+            "answer_text": "Был год назад",
+            "marked_value": {"value": "Больше года"},
+            "created_at": "2026-06-10T12:01:00+00:00",
+        }
+    )
+    with (
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch("core.services.sessions.SupabaseStorage", return_value=mem),
+    ):
+        resp = client.get("/admin/sessions/s1", headers=_auth())
+    assert resp.status_code == 200
+    marked = resp.json()["answers"][0]["marked_value"]
+    assert marked == "Больше года"
+    assert isinstance(marked, str)
 
 
 # --------------------------------------------------------------------------- #

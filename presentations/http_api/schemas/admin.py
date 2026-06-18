@@ -154,7 +154,7 @@ class SessionMessageOut(BaseModel):
 class SessionAnswerOut(BaseModel):
     question_text: str
     answer_text: str | None
-    marked_value: Any = None
+    marked_value: str | None = None
 
 
 class SessionDetailResponse(BaseModel):

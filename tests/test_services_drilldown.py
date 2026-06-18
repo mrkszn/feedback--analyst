@@ -17,7 +17,7 @@ from core.services.analytics import (
     list_clients_by_topic,
     search_clients,
 )
-from core.services.sessions import list_sessions, session_detail
+from core.services.sessions import _coerce_marked_value, list_sessions, session_detail
 from core.storage.adapters.in_memory import InMemoryStorage
 
 WINDOW_FROM = datetime(2026, 6, 1, tzinfo=UTC)
@@ -167,6 +167,45 @@ async def test_session_detail_missing_raises() -> None:
     mem = _seed()
     with pytest.raises(LookupError):
         await session_detail("does-not-exist", storage=mem)
+
+
+# --------------------------------------------------------------------------- #
+# _coerce_marked_value
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        (None, None),
+        ("Больше года", "Больше года"),
+        (5, "5"),
+        (4.5, "4.5"),
+        (True, "True"),
+        ({"value": "Больше года"}, "Больше года"),
+        ({"label": "X"}, "X"),
+        ({"value": None, "text": "Y"}, "Y"),  # skip null scalar, fall to next key
+        (["a", "b"], "a, b"),
+        ([{"value": "a"}, "b"], "a, b"),
+    ],
+)
+def test_coerce_marked_value(raw: object, expected: str | None) -> None:
+    assert _coerce_marked_value(raw) == expected
+
+
+def test_coerce_marked_value_unknown_dict_is_json_string() -> None:
+    # No value/label/text/name/title key → JSON fallback, but still a string.
+    out = _coerce_marked_value({"foo": {"bar": 1}})
+    assert out == '{"foo": {"bar": 1}}'
+
+
+async def test_session_detail_flattens_dict_marked_value() -> None:
+    mem = _seed()
+    for a in mem.session_answers:
+        if a["session_id"] == "s1":
+            a["marked_value"] = {"value": "Больше года"}
+    d = await session_detail("s1", storage=mem)
+    assert d["answers"][0]["marked_value"] == "Больше года"
+    assert isinstance(d["answers"][0]["marked_value"], str)
 
 
 # --------------------------------------------------------------------------- #
