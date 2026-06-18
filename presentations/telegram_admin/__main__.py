@@ -15,6 +15,7 @@ from presentations.telegram_admin.handlers import (
     miniapp,
     question_voice,
     questions,
+    settings_menu,
     statistics,
 )
 
@@ -28,6 +29,7 @@ ADMIN_COMMANDS: list[BotCommand] = [
     BotCommand(command="invite_admin", description="Пригласить ещё одного админа"),
     BotCommand(command="statistics", description="Статистика отзывов за период"),
     BotCommand(command="topics", description="Все топики за период"),
+    BotCommand(command="settings", description="Настройки темы и языка"),
     BotCommand(command="miniapp", description="Открыть Mini App"),
 ]
 
@@ -48,6 +50,7 @@ async def main() -> None:
     dp.include_router(question_voice.router)
     dp.include_router(admin_question_dialog.router)
     dp.include_router(miniapp.router)
+    dp.include_router(settings_menu.router)
     dp.include_router(statistics.router)
     # analytics-команды (/topics) должны срабатывать раньше fallback (LLM agent),
     # иначе свободный текст admin_agent перехватит /topics.

@@ -13,6 +13,7 @@ BTN_QUESTIONS = "📋 Вопросы"
 BTN_ADD_QUESTION = "➕ Добавить"
 BTN_ADMINS = "👥 Админы"
 BTN_STATISTICS = "📊 Статистика"
+BTN_SETTINGS = "⚙️ Настройки"
 
 
 def main_menu_keyboard() -> ReplyKeyboardMarkup:
@@ -20,6 +21,7 @@ def main_menu_keyboard() -> ReplyKeyboardMarkup:
         keyboard=[
             [KeyboardButton(text=BTN_QUESTIONS), KeyboardButton(text=BTN_ADD_QUESTION)],
             [KeyboardButton(text=BTN_STATISTICS), KeyboardButton(text=BTN_ADMINS)],
+            [KeyboardButton(text=BTN_SETTINGS)],
         ],
         resize_keyboard=True,
         is_persistent=True,

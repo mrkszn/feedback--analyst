@@ -2,13 +2,18 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from aiogram.types import ReplyKeyboardMarkup
+from aiogram.types import InlineKeyboardMarkup, ReplyKeyboardMarkup
 
 from presentations.telegram_admin.handlers.auth import admin_menu_admins, admin_start
+from presentations.telegram_admin.handlers.settings_menu import (
+    admin_settings_button,
+    admin_settings_update,
+)
 from presentations.telegram_admin.keyboards import (
     BTN_ADD_QUESTION,
     BTN_ADMINS,
     BTN_QUESTIONS,
+    BTN_SETTINGS,
     BTN_STATISTICS,
     main_menu_keyboard,
 )
@@ -20,9 +25,10 @@ def test_main_menu_keyboard_layout() -> None:
     assert kb.resize_keyboard is True
     assert kb.is_persistent is True
     rows = kb.keyboard
-    assert len(rows) == 2
+    assert len(rows) == 3
     assert [b.text for b in rows[0]] == [BTN_QUESTIONS, BTN_ADD_QUESTION]
     assert [b.text for b in rows[1]] == [BTN_STATISTICS, BTN_ADMINS]
+    assert [b.text for b in rows[2]] == [BTN_SETTINGS]
 
 
 async def test_admin_start_attaches_keyboard_for_admin() -> None:
@@ -62,6 +68,56 @@ async def test_button_admins_returns_invite_hint() -> None:
     await admin_menu_admins(message)
     text = message.answer.await_args.args[0]
     assert "/invite_admin" in text
+
+
+async def test_button_settings_shows_theme_and_language() -> None:
+    message = MagicMock()
+    message.from_user = MagicMock(id=5)
+    message.answer = AsyncMock()
+
+    fake = {"theme": "dark", "language": "en", "notifications_enabled": True}
+    with (
+        patch(
+            "presentations.telegram_admin.handlers.settings_menu.is_admin",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "presentations.telegram_admin.handlers.settings_menu.get_admin_settings",
+            new=AsyncMock(return_value=fake),
+        ),
+    ):
+        await admin_settings_button(message)
+
+    message.answer.assert_awaited_once()
+    args, kwargs = message.answer.await_args
+    assert "Настройки" in args[0]
+    assert "Тема приложения: Тёмная" in args[0]
+    assert "Язык: English" in args[0]
+    assert isinstance(kwargs.get("reply_markup"), InlineKeyboardMarkup)
+
+
+async def test_settings_callback_updates_language() -> None:
+    callback = MagicMock()
+    callback.from_user = MagicMock(id=5)
+    callback.data = "settings:language:ru"
+    callback.message = None
+    callback.answer = AsyncMock()
+
+    fake = {"theme": "dark", "language": "ru", "notifications_enabled": True}
+    with (
+        patch(
+            "presentations.telegram_admin.handlers.settings_menu.is_admin",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "presentations.telegram_admin.handlers.settings_menu.update_admin_settings",
+            new=AsyncMock(return_value=fake),
+        ) as update,
+    ):
+        await admin_settings_update(callback)
+
+    update.assert_awaited_once_with(5, language="ru")
+    callback.answer.assert_awaited_once_with("Сохранено")
 
 
 async def test_button_questions_forwards_to_list() -> None:
