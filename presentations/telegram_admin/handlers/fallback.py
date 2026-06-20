@@ -11,6 +11,8 @@ agent (`admin_agent.py`) is kept for reuse via the HTTP API but is no longer
 wired to free text here.
 """
 
+import re
+
 from aiogram import Router
 from aiogram.filters import StateFilter
 from aiogram.types import Message
@@ -20,6 +22,17 @@ from core.agent.analytics_agent.runner import answer_v2
 from presentations.telegram_admin.handlers.questions import require_admin
 
 router = Router(name="admin_fallback")
+
+_TEMPLATE_TAG_RE = re.compile(r"^\[template:[^\]]+\]\s*$")
+
+
+def _chart_text_for_telegram(chart_text: str) -> str:
+    """Telegram can't render Mini App chart templates, so drop the leading
+    `[template:<id>]` tag and keep the title + data lines as plain text."""
+    lines = chart_text.split("\n")
+    if lines and _TEMPLATE_TAG_RE.match(lines[0].strip()):
+        lines = lines[1:]
+    return "\n".join(lines).strip()
 
 
 @router.message(StateFilter(None))
@@ -38,4 +51,6 @@ async def admin_handle_freetext_fallback(message: Message) -> None:
 
     await message.answer(answer.answer_text or "Не получилось обработать запрос.")
     if answer.chart_text:
-        await message.answer(f"```text\n{answer.chart_text}\n```", parse_mode="Markdown")
+        chart = _chart_text_for_telegram(answer.chart_text)
+        if chart:
+            await message.answer(f"```text\n{chart}\n```", parse_mode="Markdown")

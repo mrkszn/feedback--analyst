@@ -174,7 +174,7 @@ def test_analytics_answer_full_shape() -> None:
         answer_text="Тренд по дням.",
         interpretation="Показываю за 7 дней.",
         tools_used=["aggregate_metric"],
-        chart_text="day1 ▆\nday2 █",
+        chart_text="[template:line.trend]\nSentiment · 7 днів\n2026-06-01: 0.3\n2026-06-02: 0.5",
     )
     assert a.tools_used == ["aggregate_metric"]
     assert a.chart_text is not None

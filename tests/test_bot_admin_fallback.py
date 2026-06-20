@@ -58,7 +58,7 @@ async def test_fallback_routes_text_to_answer_v2() -> None:
 
 async def test_fallback_sends_chart_text_as_second_message() -> None:
     msg = _mk_message()
-    chart = "ужин   ████  2 (67%)\nбизнес █    1 (33%)"
+    chart = "[template:bar.distribution]\nЧастота заказов · 30 днів\nужин | 2\nбизнес | 1"
     with (
         patch(
             "presentations.telegram_admin.handlers.fallback.require_admin",
@@ -78,8 +78,48 @@ async def test_fallback_sends_chart_text_as_second_message() -> None:
     chart_msg = second_call.args[0]
     assert chart_msg.startswith("```text\n")
     assert chart_msg.endswith("\n```")
-    assert chart in chart_msg
+    # тег шаблона срезан (бот не рисует графики), заголовок и данные остались
+    assert "[template:" not in chart_msg
+    assert "Частота заказов · 30 днів" in chart_msg
+    assert "ужин | 2" in chart_msg
     assert second_call.kwargs.get("parse_mode") == "Markdown"
+
+
+async def test_fallback_untagged_chart_passes_through() -> None:
+    msg = _mk_message()
+    chart = "позитив | 65\nнегатив | 35"  # legacy/untagged — нечего срезать
+    with (
+        patch(
+            "presentations.telegram_admin.handlers.fallback.require_admin",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "presentations.telegram_admin.handlers.fallback.answer_v2",
+            new=AsyncMock(return_value=_answer("Вот доли:", chart_text=chart)),
+        ),
+    ):
+        await admin_handle_freetext_fallback(msg)
+    assert msg.answer.await_count == 2
+    assert chart in msg.answer.await_args_list[1].args[0]
+
+
+async def test_fallback_skips_empty_chart_after_tag_strip() -> None:
+    msg = _mk_message()
+    with (
+        patch(
+            "presentations.telegram_admin.handlers.fallback.require_admin",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "presentations.telegram_admin.handlers.fallback.answer_v2",
+            new=AsyncMock(
+                return_value=_answer("Только текст.", chart_text="[template:bar.distribution]")
+            ),
+        ),
+    ):
+        await admin_handle_freetext_fallback(msg)
+    # тег без данных → после среза пусто → второе сообщение не шлём
+    msg.answer.assert_awaited_once_with("Только текст.")
 
 
 async def test_fallback_no_chart_sends_single_message() -> None:
