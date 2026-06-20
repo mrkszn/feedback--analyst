@@ -63,4 +63,10 @@ class AnalyticsAnswer(BaseModel):
     interpretation: str = Field(default="", description="Эхо из плана (прозрачность).")
     tools_used: list[str] = Field(default_factory=list)
     clarification_needed: bool = False
-    chart_text: str | None = Field(default=None, description="Опциональный ASCII-блок.")
+    chart_text: str | None = Field(
+        default=None,
+        description=(
+            "Опциональный график. Первая строка — тег `[template:<id>]`, далее "
+            "заголовок и строки данных (см. docs/CHART_TEMPLATES.md)."
+        ),
+    )
