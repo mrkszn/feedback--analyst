@@ -22,6 +22,7 @@ from uuid import UUID
 
 Role = Literal["user", "bot"]
 FeedbackSource = Literal["text", "voice"]
+WebFeedbackSource = Literal["web", "web_anon"]
 
 
 class StorageAdapter(Protocol):
@@ -135,4 +136,40 @@ class StorageAdapter(Protocol):
     async def fetch_recent_cards(self, *, columns: str, limit: int) -> list[dict[str, Any]]: ...
     async def fetch_cards_for_client(
         self, *, client_id: int, columns: str, limit: int
+    ) -> list[dict[str, Any]]: ...
+
+    # ─── guest journey (web app) ───
+    async def fetch_default_journey(self) -> dict[str, Any] | None:
+        """Default journey bundle: `{template: {...}, beats: [{...beat..., tags: [...]}]}`
+        ordered by `position`; `None` if no template is marked default."""
+        ...
+
+    async def insert_web_session(self, *, client_id: int | None) -> dict[str, Any]:
+        """Anonymous (`client_id=None`) or identified (`client_id=int`) web session.
+        Sets `feedback_source` to `'web_anon'` or `'web'` respectively."""
+        ...
+
+    async def upsert_session_beat(
+        self, *, session_id: str | UUID, beat_id: str | UUID, patch: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Insert-or-update a single beat for a session. `patch` may include
+        `score`, `tags`, `skipped`."""
+        ...
+
+    async def fetch_session_beats(self, *, session_id: str | UUID) -> list[dict[str, Any]]: ...
+
+    async def insert_session_dig(
+        self,
+        *,
+        session_id: str | UUID,
+        beat_id: str | UUID,
+        guesses: list[dict[str, Any]],
+    ) -> dict[str, Any]: ...
+
+    async def fetch_session_dig(self, *, dig_id: str | UUID) -> dict[str, Any] | None: ...
+
+    async def fetch_session_digs(self, *, session_id: str | UUID) -> list[dict[str, Any]]: ...
+
+    async def update_session_dig(
+        self, *, dig_id: str | UUID, patch: dict[str, Any]
     ) -> list[dict[str, Any]]: ...
