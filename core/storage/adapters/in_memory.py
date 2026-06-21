@@ -32,6 +32,7 @@ class InMemoryStorage:
         self.beat_tags: list[dict[str, Any]] = []
         self.session_beats: list[dict[str, Any]] = []
         self.session_digs: list[dict[str, Any]] = []
+        self.prize_tiers: list[dict[str, Any]] = []
         self._serial = itertools.count(1)
 
     def _next_serial(self) -> int:
@@ -411,3 +412,27 @@ class InMemoryStorage:
                 dig.update(patch)
                 updated.append(dig)
         return updated
+
+    # ───────────────────────────────────────── prize tiers ──
+    async def fetch_prize_tiers(self) -> list[dict[str, Any]]:
+        return [dict(p) for p in self.prize_tiers]
+
+    async def fetch_prize_tier(self, *, tier: str) -> dict[str, Any] | None:
+        return next((dict(p) for p in self.prize_tiers if p.get("tier") == tier), None)
+
+    async def upsert_prize_tier(self, *, tier: str, patch: dict[str, Any]) -> dict[str, Any]:
+        existing = next((p for p in self.prize_tiers if p.get("tier") == tier), None)
+        if existing is not None:
+            existing.update(patch)
+            existing["updated_at"] = self._now()
+            return dict(existing)
+        row = {
+            "tier": tier,
+            "code": "",
+            "label_uk": "",
+            "label_en": "",
+            "updated_at": self._now(),
+            **patch,
+        }
+        self.prize_tiers.append(row)
+        return dict(row)

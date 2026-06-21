@@ -600,3 +600,24 @@ class SupabaseStorage:
             lambda: db.table("session_digs").update(patch).eq("id", str(dig_id)).execute()
         )
         return _rows(resp)
+
+    # ───────────────────────────────────────── prize tiers ──
+    async def fetch_prize_tiers(self) -> list[dict[str, Any]]:
+        db = self._db
+        resp = await asyncio.to_thread(lambda: db.table("prize_tiers").select("*").execute())
+        return _rows(resp)
+
+    async def fetch_prize_tier(self, *, tier: str) -> dict[str, Any] | None:
+        db = self._db
+        resp = await asyncio.to_thread(
+            lambda: db.table("prize_tiers").select("*").eq("tier", tier).limit(1).execute()
+        )
+        return _first_or_none(resp)
+
+    async def upsert_prize_tier(self, *, tier: str, patch: dict[str, Any]) -> dict[str, Any]:
+        db = self._db
+        payload = {"tier": tier, **patch}
+        resp = await asyncio.to_thread(
+            lambda: db.table("prize_tiers").upsert(payload, on_conflict="tier").execute()
+        )
+        return _first(resp)

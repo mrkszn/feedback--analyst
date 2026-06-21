@@ -186,3 +186,16 @@ class StorageAdapter(Protocol):
     async def update_session_dig(
         self, *, dig_id: str | UUID, patch: dict[str, Any]
     ) -> list[dict[str, Any]]: ...
+
+    # ─── prize tiers (in-app prize config) ───
+    async def fetch_prize_tiers(self) -> list[dict[str, Any]]:
+        """All three prize-tier config rows (small/medium/large)."""
+        ...
+
+    async def fetch_prize_tier(self, *, tier: str) -> dict[str, Any] | None:
+        """One prize-tier config row, or None if absent."""
+        ...
+
+    async def upsert_prize_tier(self, *, tier: str, patch: dict[str, Any]) -> dict[str, Any]:
+        """Insert-or-update a prize-tier config row (code / label_uk / label_en)."""
+        ...

@@ -21,6 +21,7 @@ from core.services.analytics import (
     summary_overview,
     topic_histogram,
 )
+from core.services.guest_journey import get_prize_tiers, set_prize_tier_config
 from core.services.questions import get_question_expected_type, list_questions
 from core.services.sessions import list_sessions, session_detail
 from core.services.settings import get_admin_settings, update_admin_settings
@@ -40,6 +41,9 @@ from presentations.http_api.schemas.admin import (
     MetricPointOut,
     MetricsResponse,
     OverviewResponse,
+    PrizesResponse,
+    PrizeTierOut,
+    PrizeTierUpdate,
     QuestionOut,
     QuestionsResponse,
     SemanticHitOut,
@@ -408,3 +412,33 @@ async def put_settings(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return AdminSettingsResponse(**s)
+
+
+# --------------------------------------------------------------------------- #
+# GET/PUT /admin/prizes — in-app gamification prize config
+
+
+@router.get("/prizes", response_model=PrizesResponse)
+async def get_prizes(
+    _admin_id: Annotated[int, Depends(current_admin)],
+) -> PrizesResponse:
+    tiers = await get_prize_tiers()
+    return PrizesResponse(prizes=[PrizeTierOut.model_validate(t) for t in tiers])
+
+
+@router.put("/prizes/{tier}", response_model=PrizeTierOut)
+async def put_prize(
+    tier: str,
+    body: PrizeTierUpdate,
+    _admin_id: Annotated[int, Depends(current_admin)],
+) -> PrizeTierOut:
+    try:
+        row = await set_prize_tier_config(
+            tier,
+            code=body.code,
+            label_uk=body.label_uk,
+            label_en=body.label_en,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return PrizeTierOut.model_validate(row)

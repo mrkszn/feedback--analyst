@@ -157,6 +157,20 @@ class SessionAnswerOut(BaseModel):
     marked_value: str | None = None
 
 
+class JourneyBeatOut(BaseModel):
+    label_uk: str
+    emoji: str
+    score: int | None = None
+    transcription_uk: str | None = None
+    tags: list[str] = []
+
+
+class SessionJourneyOut(BaseModel):
+    mode: str
+    meal_occasion: str | None = None
+    beats: list[JourneyBeatOut]
+
+
 class SessionDetailResponse(BaseModel):
     id: str
     client_id: int | None
@@ -170,6 +184,9 @@ class SessionDetailResponse(BaseModel):
     messages: list[SessionMessageOut]
     answers: list[SessionAnswerOut]
     card_summary: str | None
+    # Present only for web (guest webapp) sessions — the beat ribbon with mood
+    # emoji + UK transcription that the admin renders instead of a transcript.
+    journey: SessionJourneyOut | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -225,6 +242,31 @@ class AdminSettingsUpdate(BaseModel):
     theme: Theme | None = None
     language: Language | None = None
     notifications_enabled: bool | None = None
+
+
+# --------------------------------------------------------------------------- #
+# prizes (in-app gamification config)
+
+PrizeTier = Literal["small", "medium", "large"]
+
+
+class PrizeTierOut(BaseModel):
+    tier: PrizeTier
+    code: str
+    label_uk: str
+    label_en: str
+
+
+class PrizesResponse(BaseModel):
+    prizes: list[PrizeTierOut]
+
+
+class PrizeTierUpdate(BaseModel):
+    """Partial update of one tier — only provided fields change."""
+
+    code: str | None = Field(default=None, max_length=120)
+    label_uk: str | None = Field(default=None, max_length=120)
+    label_en: str | None = Field(default=None, max_length=120)
 
 
 # --------------------------------------------------------------------------- #
