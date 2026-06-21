@@ -7,10 +7,24 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 InputType = Literal["mood_slider", "chip_pick", "yes_no"]
+JourneyName = Literal["restaurant", "delivery"]
+SessionMode = Literal["non_targeted", "targeted"]
+MealOccasion = Literal["breakfast", "lunch", "dinner", "other"]
 
 
 # --------------------------------------------------------------------------- #
 # session auth
+
+
+class StartSessionRequest(BaseModel):
+    """Optional body for POST /guest/sessions. The QR code encodes which
+    journey/mode the guest enters; `meal_occasion` is the restaurant's
+    "when did you visit" answer (ignored for delivery). All optional so the
+    bare anonymous start still works."""
+
+    journey: JourneyName = "restaurant"
+    mode: SessionMode = "non_targeted"
+    meal_occasion: MealOccasion | None = None
 
 
 class StartSessionResponse(BaseModel):

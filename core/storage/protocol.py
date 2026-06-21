@@ -144,9 +144,22 @@ class StorageAdapter(Protocol):
         ordered by `position`; `None` if no template is marked default."""
         ...
 
-    async def insert_web_session(self, *, client_id: int | None) -> dict[str, Any]:
+    async def fetch_journey_by_name(self, *, name: str) -> dict[str, Any] | None:
+        """Journey bundle for a named template (e.g. `'delivery'`), same shape as
+        `fetch_default_journey`; `None` if no template has that name."""
+        ...
+
+    async def insert_web_session(
+        self,
+        *,
+        client_id: int | None,
+        journey_template_name: str | None = None,
+        mode: str = "non_targeted",
+        meal_occasion: str | None = None,
+    ) -> dict[str, Any]:
         """Anonymous (`client_id=None`) or identified (`client_id=int`) web session.
-        Sets `feedback_source` to `'web_anon'` or `'web'` respectively."""
+        Sets `feedback_source` to `'web_anon'` or `'web'` respectively, and captures
+        the journey/mode/meal_occasion context on the row."""
         ...
 
     async def upsert_session_beat(

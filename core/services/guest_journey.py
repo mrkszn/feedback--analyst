@@ -61,7 +61,10 @@ def _storage(storage: StorageAdapter | None, db: Client | None) -> StorageAdapte
 async def _load_web_session(store: StorageAdapter, session_id: str | UUID) -> dict[str, Any]:
     rows = await store.fetch_sessions_by_ids(
         session_ids=[str(session_id)],
-        columns="id, client_id, started_at, ended_at, feedback_source, language",
+        columns=(
+            "id, client_id, started_at, ended_at, feedback_source, language, "
+            "journey_template_name, mode, meal_occasion"
+        ),
     )
     if not rows:
         raise LookupError(f"session {session_id} not found")
@@ -69,6 +72,24 @@ async def _load_web_session(store: StorageAdapter, session_id: str | UUID) -> di
     if row.get("feedback_source") not in _WEB_SOURCES:
         raise LookupError(f"session {session_id} is not a web session")
     return row
+
+
+async def _journey_for_session(store: StorageAdapter, row: dict[str, Any]) -> dict[str, Any]:
+    """Resolve the journey bundle the session walked. Uses the session's
+    `journey_template_name` when set, otherwise the default; falls back to the
+    default if the named template no longer exists. Raises if nothing is
+    configured."""
+    name = row.get("journey_template_name")
+    journey = (
+        await store.fetch_journey_by_name(name=str(name))
+        if name
+        else await store.fetch_default_journey()
+    )
+    if journey is None:
+        journey = await store.fetch_default_journey()
+    if journey is None:
+        raise LookupError("no journey configured")
+    return journey
 
 
 def _beat_state(row: dict[str, Any]) -> BeatState:
@@ -112,14 +133,39 @@ async def get_default_journey(
     return await store.fetch_default_journey()
 
 
+async def get_journey(
+    name: str | None = None,
+    *,
+    storage: StorageAdapter | None = None,
+    db: Client | None = None,
+) -> dict[str, Any] | None:
+    """Journey bundle for `name` (e.g. `'delivery'`), or the default journey
+    when `name` is None. None if the requested template does not exist."""
+    store = _storage(storage, db)
+    if name is None:
+        return await store.fetch_default_journey()
+    return await store.fetch_journey_by_name(name=name)
+
+
 async def start_anonymous_session(
+    journey: str = "restaurant",
+    mode: str = "non_targeted",
+    meal_occasion: str | None = None,
     *,
     storage: StorageAdapter | None = None,
     db: Client | None = None,
 ) -> str:
-    """Create a new anonymous web session and return its id."""
+    """Create a new anonymous web session and return its id. Captures the
+    journey/mode/meal_occasion context on the row. `meal_occasion` is only
+    meaningful for the restaurant journey — it is dropped for delivery."""
     store = _storage(storage, db)
-    row = await store.insert_web_session(client_id=None)
+    occasion = meal_occasion if journey == "restaurant" else None
+    row = await store.insert_web_session(
+        client_id=None,
+        journey_template_name=journey,
+        mode=mode,
+        meal_occasion=occasion,
+    )
     return str(row["id"])
 
 
@@ -209,11 +255,9 @@ async def dig_for_beat(
     Reads the current score + tags the guest already picked on this beat to
     feed the LLM; falls back to score=3 if none recorded yet."""
     store = _storage(storage, db)
-    await _load_web_session(store, session_id)
+    row = await _load_web_session(store, session_id)
 
-    journey = await store.fetch_default_journey()
-    if journey is None:
-        raise LookupError("no default journey configured")
+    journey = await _journey_for_session(store, row)
     label, _ = _beat_label(journey, str(beat_id))
     if not label:
         raise LookupError(f"beat {beat_id} not part of the default journey")
@@ -349,9 +393,7 @@ async def finalize_session(
     if row.get("ended_at"):
         return
 
-    journey = await store.fetch_default_journey()
-    if journey is None:
-        raise LookupError("no default journey configured")
+    journey = await _journey_for_session(store, row)
     beats = await store.fetch_session_beats(session_id=session_id)
     digs = await store.fetch_session_digs(session_id=session_id)
 

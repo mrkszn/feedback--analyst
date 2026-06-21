@@ -452,17 +452,9 @@ class SupabaseStorage:
         return _rows(resp)
 
     # ───────────────────────────────────────── guest journey (web app) ──
-    async def fetch_default_journey(self) -> dict[str, Any] | None:
+    async def _journey_bundle(self, template: dict[str, Any]) -> dict[str, Any]:
+        """Build `{template, beats: [{...beat, tags}]}` from a template row."""
         db = self._db
-        tpl_resp = await asyncio.to_thread(
-            lambda: (
-                db.table("journey_templates").select("*").eq("is_default", True).limit(1).execute()
-            )
-        )
-        template = _first_or_none(tpl_resp)
-        if template is None:
-            return None
-
         beats_resp = await asyncio.to_thread(
             lambda: (
                 db.table("journey_beats")
@@ -493,13 +485,47 @@ class SupabaseStorage:
             beat["tags"] = tags_by_beat.get(str(beat["id"]), [])
         return {"template": template, "beats": beats}
 
-    async def insert_web_session(self, *, client_id: int | None) -> dict[str, Any]:
+    async def fetch_default_journey(self) -> dict[str, Any] | None:
+        db = self._db
+        tpl_resp = await asyncio.to_thread(
+            lambda: (
+                db.table("journey_templates").select("*").eq("is_default", True).limit(1).execute()
+            )
+        )
+        template = _first_or_none(tpl_resp)
+        if template is None:
+            return None
+        return await self._journey_bundle(template)
+
+    async def fetch_journey_by_name(self, *, name: str) -> dict[str, Any] | None:
+        db = self._db
+        tpl_resp = await asyncio.to_thread(
+            lambda: db.table("journey_templates").select("*").eq("name", name).limit(1).execute()
+        )
+        template = _first_or_none(tpl_resp)
+        if template is None:
+            return None
+        return await self._journey_bundle(template)
+
+    async def insert_web_session(
+        self,
+        *,
+        client_id: int | None,
+        journey_template_name: str | None = None,
+        mode: str = "non_targeted",
+        meal_occasion: str | None = None,
+    ) -> dict[str, Any]:
         db = self._db
         payload: dict[str, Any] = {
             "feedback_source": "web" if client_id is not None else "web_anon",
+            "mode": mode,
         }
         if client_id is not None:
             payload["client_id"] = client_id
+        if journey_template_name is not None:
+            payload["journey_template_name"] = journey_template_name
+        if meal_occasion is not None:
+            payload["meal_occasion"] = meal_occasion
         resp = await asyncio.to_thread(lambda: db.table("sessions").insert(payload).execute())
         return _first(resp)
 
