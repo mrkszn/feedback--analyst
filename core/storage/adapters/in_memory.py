@@ -27,6 +27,11 @@ class InMemoryStorage:
         self.session_messages: list[dict[str, Any]] = []
         self.session_answers: list[dict[str, Any]] = []
         self.client_cards: list[dict[str, Any]] = []
+        self.journey_templates: list[dict[str, Any]] = []
+        self.journey_beats: list[dict[str, Any]] = []
+        self.beat_tags: list[dict[str, Any]] = []
+        self.session_beats: list[dict[str, Any]] = []
+        self.session_digs: list[dict[str, Any]] = []
         self._serial = itertools.count(1)
 
     def _next_serial(self) -> int:
@@ -289,3 +294,101 @@ class InMemoryStorage:
         rows = [c for c in self.client_cards if c.get("client_id") == client_id]
         rows.sort(key=lambda c: c.get("created_at") or "", reverse=True)
         return rows[:limit]
+
+    # ───────────────────────────────────────── guest journey (web app) ──
+    async def fetch_default_journey(self) -> dict[str, Any] | None:
+        template = next((t for t in self.journey_templates if t.get("is_default")), None)
+        if template is None:
+            return None
+        beats = sorted(
+            (b for b in self.journey_beats if str(b.get("template_id")) == str(template["id"])),
+            key=lambda b: int(b.get("position") or 0),
+        )
+        out_beats: list[dict[str, Any]] = []
+        for beat in beats:
+            tags = sorted(
+                (t for t in self.beat_tags if str(t.get("beat_id")) == str(beat["id"])),
+                key=lambda t: int(t.get("position") or 0),
+            )
+            out_beats.append({**beat, "tags": list(tags)})
+        return {"template": dict(template), "beats": out_beats}
+
+    async def insert_web_session(self, *, client_id: int | None) -> dict[str, Any]:
+        row: dict[str, Any] = {
+            "id": str(uuid4()),
+            "client_id": client_id,
+            "feedback_source": "web" if client_id is not None else "web_anon",
+            "started_at": self._now(),
+            "ended_at": None,
+            "feedback_summary": None,
+        }
+        self.sessions.append(row)
+        return row
+
+    async def upsert_session_beat(
+        self, *, session_id: str | UUID, beat_id: str | UUID, patch: dict[str, Any]
+    ) -> dict[str, Any]:
+        existing = next(
+            (
+                b
+                for b in self.session_beats
+                if str(b.get("session_id")) == str(session_id)
+                and str(b.get("beat_id")) == str(beat_id)
+            ),
+            None,
+        )
+        if existing is not None:
+            existing.update(patch)
+            existing["updated_at"] = self._now()
+            return existing
+        row = {
+            "session_id": str(session_id),
+            "beat_id": str(beat_id),
+            "score": None,
+            "tags": [],
+            "skipped": False,
+            "updated_at": self._now(),
+            **patch,
+        }
+        self.session_beats.append(row)
+        return row
+
+    async def fetch_session_beats(self, *, session_id: str | UUID) -> list[dict[str, Any]]:
+        return [b for b in self.session_beats if str(b.get("session_id")) == str(session_id)]
+
+    async def insert_session_dig(
+        self,
+        *,
+        session_id: str | UUID,
+        beat_id: str | UUID,
+        guesses: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        row = {
+            "id": str(uuid4()),
+            "session_id": str(session_id),
+            "beat_id": str(beat_id),
+            "guesses": list(guesses),
+            "accepted_guess_id": None,
+            "free_text": None,
+            "voice_object_key": None,
+            "created_at": self._now(),
+        }
+        self.session_digs.append(row)
+        return row
+
+    async def fetch_session_dig(self, *, dig_id: str | UUID) -> dict[str, Any] | None:
+        return next((d for d in self.session_digs if str(d.get("id")) == str(dig_id)), None)
+
+    async def fetch_session_digs(self, *, session_id: str | UUID) -> list[dict[str, Any]]:
+        rows = [d for d in self.session_digs if str(d.get("session_id")) == str(session_id)]
+        return sorted(rows, key=lambda d: str(d.get("created_at") or ""))
+
+    async def update_session_dig(
+        self, *, dig_id: str | UUID, patch: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        updated: list[dict[str, Any]] = []
+        for dig in self.session_digs:
+            if str(dig.get("id")) == str(dig_id):
+                dig.update(patch)
+                updated.append(dig)
+        return updated

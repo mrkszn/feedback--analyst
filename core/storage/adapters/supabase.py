@@ -450,3 +450,127 @@ class SupabaseStorage:
             )
         )
         return _rows(resp)
+
+    # ───────────────────────────────────────── guest journey (web app) ──
+    async def fetch_default_journey(self) -> dict[str, Any] | None:
+        db = self._db
+        tpl_resp = await asyncio.to_thread(
+            lambda: (
+                db.table("journey_templates").select("*").eq("is_default", True).limit(1).execute()
+            )
+        )
+        template = _first_or_none(tpl_resp)
+        if template is None:
+            return None
+
+        beats_resp = await asyncio.to_thread(
+            lambda: (
+                db.table("journey_beats")
+                .select("*")
+                .eq("template_id", template["id"])
+                .order("position", desc=False)
+                .execute()
+            )
+        )
+        beats = _rows(beats_resp)
+        if not beats:
+            return {"template": template, "beats": []}
+
+        beat_ids = [str(b["id"]) for b in beats]
+        tags_resp = await asyncio.to_thread(
+            lambda: (
+                db.table("beat_tags")
+                .select("*")
+                .in_("beat_id", beat_ids)
+                .order("position", desc=False)
+                .execute()
+            )
+        )
+        tags_by_beat: dict[str, list[dict[str, Any]]] = {}
+        for tag in _rows(tags_resp):
+            tags_by_beat.setdefault(str(tag["beat_id"]), []).append(tag)
+        for beat in beats:
+            beat["tags"] = tags_by_beat.get(str(beat["id"]), [])
+        return {"template": template, "beats": beats}
+
+    async def insert_web_session(self, *, client_id: int | None) -> dict[str, Any]:
+        db = self._db
+        payload: dict[str, Any] = {
+            "feedback_source": "web" if client_id is not None else "web_anon",
+        }
+        if client_id is not None:
+            payload["client_id"] = client_id
+        resp = await asyncio.to_thread(lambda: db.table("sessions").insert(payload).execute())
+        return _first(resp)
+
+    async def upsert_session_beat(
+        self, *, session_id: str | UUID, beat_id: str | UUID, patch: dict[str, Any]
+    ) -> dict[str, Any]:
+        db = self._db
+        payload: dict[str, Any] = {
+            "session_id": str(session_id),
+            "beat_id": str(beat_id),
+            **patch,
+        }
+        resp = await asyncio.to_thread(
+            lambda: (
+                db.table("session_beats")
+                .upsert(payload, on_conflict="session_id,beat_id")
+                .execute()
+            )
+        )
+        return _first(resp)
+
+    async def fetch_session_beats(self, *, session_id: str | UUID) -> list[dict[str, Any]]:
+        db = self._db
+        resp = await asyncio.to_thread(
+            lambda: (
+                db.table("session_beats").select("*").eq("session_id", str(session_id)).execute()
+            )
+        )
+        return _rows(resp)
+
+    async def insert_session_dig(
+        self,
+        *,
+        session_id: str | UUID,
+        beat_id: str | UUID,
+        guesses: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        db = self._db
+        payload: dict[str, Any] = {
+            "session_id": str(session_id),
+            "beat_id": str(beat_id),
+            "guesses": guesses,
+        }
+        resp = await asyncio.to_thread(lambda: db.table("session_digs").insert(payload).execute())
+        return _first(resp)
+
+    async def fetch_session_dig(self, *, dig_id: str | UUID) -> dict[str, Any] | None:
+        db = self._db
+        resp = await asyncio.to_thread(
+            lambda: db.table("session_digs").select("*").eq("id", str(dig_id)).limit(1).execute()
+        )
+        return _first_or_none(resp)
+
+    async def fetch_session_digs(self, *, session_id: str | UUID) -> list[dict[str, Any]]:
+        db = self._db
+        resp = await asyncio.to_thread(
+            lambda: (
+                db.table("session_digs")
+                .select("*")
+                .eq("session_id", str(session_id))
+                .order("created_at", desc=False)
+                .execute()
+            )
+        )
+        return _rows(resp)
+
+    async def update_session_dig(
+        self, *, dig_id: str | UUID, patch: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        db = self._db
+        resp = await asyncio.to_thread(
+            lambda: db.table("session_digs").update(patch).eq("id", str(dig_id)).execute()
+        )
+        return _rows(resp)
