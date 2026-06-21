@@ -46,6 +46,20 @@ class SessionAnswer(TypedDict):
     marked_value: str | None
 
 
+class JourneyBeatOut(TypedDict):
+    label_uk: str
+    emoji: str
+    score: int | None
+    transcription_uk: str | None
+    tags: list[str]
+
+
+class SessionJourney(TypedDict):
+    mode: str
+    meal_occasion: str | None
+    beats: list[JourneyBeatOut]
+
+
 class SessionDetail(TypedDict):
     id: str
     client_id: int | None
@@ -59,10 +73,68 @@ class SessionDetail(TypedDict):
     messages: list[SessionMessage]
     answers: list[SessionAnswer]
     card_summary: str | None
+    journey: SessionJourney | None
+
+
+# Mood-face per 1..5 score — mirrors the guest webapp's MOOD_FACES so the admin
+# ribbon shows the same emoji the guest tapped.
+_SCORE_FACE = {1: "😣", 2: "🙁", 3: "😐", 4: "🙂", 5: "😍"}
+_WEB_SOURCES = ("web", "web_anon")
 
 
 def _storage(storage: StorageAdapter | None, db: Client | None) -> StorageAdapter:
     return storage or SupabaseStorage(db)
+
+
+async def _session_journey(store: StorageAdapter, row: dict[str, Any]) -> SessionJourney | None:
+    """Build the beat ribbon for a web session: each journey beat with the mood
+    emoji, score, UK transcription and the chip-tag labels the guest picked.
+    None for non-web (bot) sessions."""
+    if row.get("feedback_source") not in _WEB_SOURCES:
+        return None
+    name = row.get("journey_template_name")
+    journey = (
+        await store.fetch_journey_by_name(name=str(name))
+        if name
+        else await store.fetch_default_journey()
+    )
+    if journey is None:
+        journey = await store.fetch_default_journey()
+    if journey is None:
+        return None
+
+    session_beats = await store.fetch_session_beats(session_id=str(row["id"]))
+    sb_by_id = {str(b.get("beat_id")): b for b in session_beats}
+    beats: list[JourneyBeatOut] = []
+    for jb in journey.get("beats", []):
+        sb = sb_by_id.get(str(jb.get("id")))
+        score = int(sb["score"]) if sb and sb.get("score") is not None else None
+        tag_meta = {
+            str(t.get("tag_key")): str(t.get("label_uk") or "") for t in jb.get("tags") or []
+        }
+        picked = sb.get("tags") if sb else None
+        tag_labels = (
+            [tag_meta[str(k)] for k in picked if str(k) in tag_meta]
+            if isinstance(picked, list)
+            else []
+        )
+        transcription = (
+            str(sb["emoji_transcription_uk"]) if sb and sb.get("emoji_transcription_uk") else None
+        )
+        beats.append(
+            JourneyBeatOut(
+                label_uk=str(jb.get("label_uk") or jb.get("beat_key") or ""),
+                emoji=_SCORE_FACE.get(score, "▫️") if score is not None else "▫️",
+                score=score,
+                transcription_uk=transcription,
+                tags=tag_labels,
+            )
+        )
+    return SessionJourney(
+        mode=str(row.get("mode") or "non_targeted"),
+        meal_occasion=row.get("meal_occasion"),
+        beats=beats,
+    )
 
 
 def _summary_dict(row: dict[str, Any]) -> dict[str, Any]:
@@ -249,7 +321,10 @@ async def session_detail(
 
     found = await store.fetch_sessions_by_ids(
         session_ids=[str(session_id)],
-        columns="id, client_id, started_at, ended_at, feedback_summary, feedback_source",
+        columns=(
+            "id, client_id, started_at, ended_at, feedback_summary, feedback_source, "
+            "journey_template_name, mode, meal_occasion"
+        ),
     )
     if not found:
         raise LookupError(f"session {session_id} not found")
@@ -296,6 +371,7 @@ async def session_detail(
     names = await _client_names(store, [cid])
     cid_int = int(cid) if cid is not None else None
     summary_text = _summary_dict(row).get("summary")
+    journey = await _session_journey(store, row)
 
     return SessionDetail(
         id=str(row["id"]),
@@ -310,4 +386,5 @@ async def session_detail(
         messages=messages,
         answers=answers,
         card_summary=card_summary,
+        journey=journey,
     )
