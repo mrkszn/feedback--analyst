@@ -42,6 +42,14 @@ class Settings(BaseSettings):
     # Local dev — cloudflared/ngrok tunnel URL, prod — стабильный домен.
     admin_mini_app_url: str = ""
 
+    # Public guest webapp (Phase 5) — JWT secret для гостевых сессий
+    # ("вечер як стрічка" UX). Отдельный домен доверия от админского
+    # mini_app_session_secret. Пусто = guest API в fail-loud (RuntimeError).
+    guest_session_secret: str = ""
+    # CORS allowlist для публичного guest webapp (comma-separated origins).
+    # Пусто = guest endpoints не получают CORS-заголовков. Без "*".
+    allowed_guest_origins: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
