@@ -15,14 +15,21 @@ import pytest
 
 from core.agent.nodes.analyze import FeedbackSummary
 from core.services.guest_journey import (
+    beat_transcription_uk,
+    compute_prize,
     dig_for_beat,
     finalize_session,
     get_default_journey,
     get_journey,
+    get_prize_tiers,
+    identify_guest,
     record_dig_answer,
     restore_session,
     save_beat,
+    score_for_session,
+    set_prize_tier_config,
     start_anonymous_session,
+    tier_for_points,
 )
 from core.storage.adapters.in_memory import InMemoryStorage
 
@@ -483,3 +490,198 @@ async def test_finalize_session_uses_the_sessions_own_journey() -> None:
     raw_text: str = m.await_args.args[0]
     assert "Кур'єр" in raw_text
     assert "2/5" in raw_text
+
+
+# --------------------------------------------------------------------------- #
+# scoring (pure functions)
+
+
+def test_score_for_session_counts_all_signals() -> None:
+    beats: list[dict[str, Any]] = [
+        {"beat_id": "b1", "score": 4, "tags": ["x", "y"], "skipped": False},  # 5 + 2*3
+        {"beat_id": "b2", "score": 2, "tags": [], "skipped": False},  # 5
+        {"beat_id": "b3", "score": None, "tags": [], "skipped": True},  # 0
+    ]
+    digs: list[dict[str, Any]] = [
+        {"accepted_guess_id": "g1", "free_text": None, "voice_object_key": None},  # 15
+        {"accepted_guess_id": None, "free_text": "x" * 60, "voice_object_key": None},  # 35
+        {"accepted_guess_id": None, "free_text": None, "voice_object_key": "v.ogg"},  # 30
+    ]
+    assert score_for_session(beats, digs, has_email=False) == 96
+    assert score_for_session(beats, digs, has_email=True) == 136
+
+
+def test_score_for_session_short_text_gets_no_long_bonus() -> None:
+    digs: list[dict[str, Any]] = [
+        {"accepted_guess_id": None, "free_text": "коротко", "voice_object_key": None}
+    ]
+    assert score_for_session([], digs, has_email=False) == 15
+
+
+def test_tier_for_points_boundaries() -> None:
+    assert tier_for_points(0) == "small"
+    assert tier_for_points(40) == "small"
+    assert tier_for_points(41) == "medium"
+    assert tier_for_points(120) == "medium"
+    assert tier_for_points(121) == "large"
+
+
+def test_beat_transcription_uk() -> None:
+    assert beat_transcription_uk(score=5, skipped=False) == "захоплення"
+    assert beat_transcription_uk(score=1, skipped=False) == "розчарування"
+    assert beat_transcription_uk(score=None, skipped=False) == "без оцінки"
+    assert beat_transcription_uk(score=3, skipped=True) == "пропустив"
+
+
+# --------------------------------------------------------------------------- #
+# identify_guest
+
+
+async def test_identify_guest_persists_and_trims() -> None:
+    mem = InMemoryStorage()
+    _seed_journey(mem)
+    sid = await start_anonymous_session("restaurant", "targeted", storage=mem)
+    out = await identify_guest(
+        sid, name="  Іван  ", email="ivan@example.com", phone="+380501112233", storage=mem
+    )
+    assert out["name"] == "Іван"
+    assert out["email"] == "ivan@example.com"
+    row = mem.sessions[0]
+    assert row["guest_name"] == "Іван"
+    assert row["guest_email"] == "ivan@example.com"
+    assert row["guest_phone"] == "+380501112233"
+
+
+async def test_identify_guest_requires_name() -> None:
+    mem = InMemoryStorage()
+    _seed_journey(mem)
+    sid = await start_anonymous_session(storage=mem)
+    with pytest.raises(ValueError, match="name"):
+        await identify_guest(sid, name="   ", storage=mem)
+
+
+async def test_identify_guest_rejects_bad_email() -> None:
+    mem = InMemoryStorage()
+    _seed_journey(mem)
+    sid = await start_anonymous_session(storage=mem)
+    with pytest.raises(ValueError, match="email"):
+        await identify_guest(sid, name="Іван", email="not-an-email", storage=mem)
+
+
+# --------------------------------------------------------------------------- #
+# finalize: points + tier + transcription
+
+
+async def test_finalize_computes_points_tier_and_transcription() -> None:
+    mem = InMemoryStorage()
+    ids = _seed_journey(mem)
+    sid = await start_anonymous_session("restaurant", "targeted", storage=mem)
+    await save_beat(sid, ids["arrival_id"], score=5, storage=mem)
+    await save_beat(sid, ids["food_id"], score=2, tags=["cold"], storage=mem)
+
+    summary = FeedbackSummary(summary="s", sentiment="negative", topics=["еда"], emotion="annoyed")
+    with patch(
+        "core.services.guest_journey.analyze_feedback",
+        new=AsyncMock(return_value=summary),
+    ):
+        await finalize_session(sid, storage=mem)
+
+    row = mem.sessions[0]
+    assert row["points"] == 13  # arrival 5 + food 5 + 1 tag * 3
+    assert row["prize_tier"] == "small"
+    arrival = next(b for b in mem.session_beats if b["beat_id"] == ids["arrival_id"])
+    food = next(b for b in mem.session_beats if b["beat_id"] == ids["food_id"])
+    assert arrival["emoji_transcription_uk"] == "захоплення"
+    assert food["emoji_transcription_uk"] == "не сподобалось"
+
+
+# --------------------------------------------------------------------------- #
+# compute_prize + prize-tier config
+
+
+async def test_compute_prize_resolves_tier_and_config() -> None:
+    mem = InMemoryStorage()
+    ids = _seed_journey(mem)
+    mem.prize_tiers.append(
+        {"tier": "small", "code": "WELCOME10", "label_uk": "Бонус", "label_en": "Bonus"}
+    )
+    sid = await start_anonymous_session("restaurant", "targeted", storage=mem)
+    await save_beat(sid, ids["food_id"], score=2, storage=mem)
+    summary = FeedbackSummary(summary="s", sentiment="neutral", topics=[], emotion="ok")
+    with patch(
+        "core.services.guest_journey.analyze_feedback",
+        new=AsyncMock(return_value=summary),
+    ):
+        await finalize_session(sid, storage=mem)
+
+    prize = await compute_prize(sid, storage=mem)
+    assert prize["tier"] == "small"
+    assert prize["points"] == 5
+    assert prize["code"] == "WELCOME10"
+    assert prize["label_uk"] == "Бонус"
+
+
+async def test_compute_prize_works_before_finalize_live() -> None:
+    mem = InMemoryStorage()
+    ids = _seed_journey(mem)
+    sid = await start_anonymous_session("restaurant", "targeted", storage=mem)
+    await save_beat(sid, ids["food_id"], score=3, storage=mem)
+    prize = await compute_prize(sid, storage=mem)
+    assert prize["tier"] == "small"
+    assert prize["points"] == 5
+    assert prize["code"] == ""  # no config seeded
+
+
+async def test_prize_tier_config_set_and_get_ordered() -> None:
+    mem = InMemoryStorage()
+    await set_prize_tier_config("large", code="BIG", label_uk="Великий", storage=mem)
+    await set_prize_tier_config("small", code="SM", storage=mem)
+    tiers = await get_prize_tiers(storage=mem)
+    assert [t["tier"] for t in tiers] == ["small", "large"]
+    assert next(t for t in tiers if t["tier"] == "large")["code"] == "BIG"
+
+
+async def test_set_prize_tier_rejects_unknown_tier() -> None:
+    mem = InMemoryStorage()
+    with pytest.raises(ValueError, match="tier"):
+        await set_prize_tier_config("huge", code="X", storage=mem)
+
+
+# --------------------------------------------------------------------------- #
+# dig: meal_occasion as AI context (targeted restaurant only)
+
+
+async def test_dig_passes_meal_occasion_for_targeted_restaurant() -> None:
+    mem = InMemoryStorage()
+    ids = _seed_journey(mem)
+    sid = await start_anonymous_session("restaurant", "targeted", "dinner", storage=mem)
+    await save_beat(sid, ids["food_id"], score=2, storage=mem)
+    guesses = [
+        {"id": "g1", "text_uk": "a", "text_en": "a", "emoji": "🤷"},
+        {"id": "g2", "text_uk": "b", "text_en": "b", "emoji": "🕒"},
+    ]
+    with patch(
+        "core.services.guest_journey.dig_guesses_for_beat",
+        new=AsyncMock(return_value=guesses),
+    ) as m:
+        await dig_for_beat(sid, ids["food_id"], storage=mem)
+    assert m.await_args is not None
+    assert m.await_args.kwargs["meal_occasion"] == "dinner"
+
+
+async def test_dig_omits_meal_occasion_for_non_targeted() -> None:
+    mem = InMemoryStorage()
+    ids = _seed_journey(mem)
+    sid = await start_anonymous_session("restaurant", "non_targeted", "dinner", storage=mem)
+    await save_beat(sid, ids["food_id"], score=2, storage=mem)
+    guesses = [
+        {"id": "g1", "text_uk": "a", "text_en": "a", "emoji": "🤷"},
+        {"id": "g2", "text_uk": "b", "text_en": "b", "emoji": "🕒"},
+    ]
+    with patch(
+        "core.services.guest_journey.dig_guesses_for_beat",
+        new=AsyncMock(return_value=guesses),
+    ) as m:
+        await dig_for_beat(sid, ids["food_id"], storage=mem)
+    assert m.await_args is not None
+    assert m.await_args.kwargs["meal_occasion"] == ""

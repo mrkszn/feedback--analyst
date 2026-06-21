@@ -106,6 +106,8 @@ class DigStateOut(BaseModel):
 class SessionStateOut(BaseModel):
     session_id: str
     feedback_source: str
+    mode: SessionMode = "non_targeted"
+    points: int | None = None
     started_at: str | None = None
     ended_at: str | None = None
     beats: list[BeatStateOut]
@@ -145,3 +147,29 @@ class DigAnswerResponse(BaseModel):
 
 class FinalizeResponse(BaseModel):
     status: Literal["accepted"] = "accepted"
+
+
+# --------------------------------------------------------------------------- #
+# identify + prize (targeted gamification)
+
+PrizeTier = Literal["small", "medium", "large"]
+
+
+class IdentifyRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    email: str | None = Field(default=None, max_length=200)
+    phone: str | None = Field(default=None, max_length=40)
+
+
+class IdentifyResponse(BaseModel):
+    name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+
+
+class PrizeResponse(BaseModel):
+    tier: PrizeTier
+    points: int
+    code: str
+    label_uk: str
+    label_en: str

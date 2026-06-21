@@ -18,9 +18,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from config import settings
 from core.services.guest_journey import (
+    compute_prize,
     dig_for_beat,
     finalize_session,
     get_journey,
+    identify_guest,
     record_dig_answer,
     restore_session,
     save_beat,
@@ -36,7 +38,10 @@ from presentations.http_guest_api.schemas.guest import (
     DigStartRequest,
     DigStartResponse,
     FinalizeResponse,
+    IdentifyRequest,
+    IdentifyResponse,
     JourneyResponse,
+    PrizeResponse,
     SessionStateOut,
     StartSessionRequest,
     StartSessionResponse,
@@ -224,3 +229,36 @@ async def post_finalize(
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return FinalizeResponse(status="accepted")
+
+
+# --------------------------------------------------------------------------- #
+# identity + prize (targeted gamification)
+
+
+@router.post("/sessions/{session_id}/identify", response_model=IdentifyResponse)
+async def post_identify(
+    session_id: str,
+    body: IdentifyRequest,
+    token_session_id: Annotated[str, Depends(current_guest_session)],
+) -> IdentifyResponse:
+    _require_path_matches_token(session_id, token_session_id)
+    try:
+        out = await identify_guest(session_id, name=body.name, email=body.email, phone=body.phone)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return IdentifyResponse.model_validate(out)
+
+
+@router.get("/sessions/{session_id}/prize", response_model=PrizeResponse)
+async def get_prize(
+    session_id: str,
+    token_session_id: Annotated[str, Depends(current_guest_session)],
+) -> PrizeResponse:
+    _require_path_matches_token(session_id, token_session_id)
+    try:
+        prize = await compute_prize(session_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return PrizeResponse.model_validate(prize)

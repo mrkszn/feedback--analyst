@@ -390,6 +390,126 @@ def test_finalize_404_on_lookup_error(client: TestClient) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# POST /guest/sessions/{id}/identify
+
+
+def test_identify_ok(client: TestClient) -> None:
+    sid = str(uuid4())
+    fake = {"name": "Іван", "email": "ivan@example.com", "phone": None}
+    with patch(
+        "presentations.http_guest_api.routes.guest.identify_guest",
+        return_value=fake,
+    ):
+        resp = client.post(
+            f"/guest/sessions/{sid}/identify",
+            json={"name": "Іван", "email": "ivan@example.com"},
+            headers=_auth_for(sid),
+        )
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Іван"
+
+
+def test_identify_empty_name_is_422(client: TestClient) -> None:
+    sid = str(uuid4())
+    resp = client.post(
+        f"/guest/sessions/{sid}/identify",
+        json={"name": ""},
+        headers=_auth_for(sid),
+    )
+    assert resp.status_code == 422  # min_length=1
+
+
+def test_identify_400_on_value_error(client: TestClient) -> None:
+    sid = str(uuid4())
+    with patch(
+        "presentations.http_guest_api.routes.guest.identify_guest",
+        side_effect=ValueError("invalid email"),
+    ):
+        resp = client.post(
+            f"/guest/sessions/{sid}/identify",
+            json={"name": "Іван", "email": "bad"},
+            headers=_auth_for(sid),
+        )
+    assert resp.status_code == 400
+
+
+def test_identify_enforces_path_matches_token(client: TestClient) -> None:
+    token_sid = str(uuid4())
+    other = str(uuid4())
+    resp = client.post(
+        f"/guest/sessions/{other}/identify",
+        json={"name": "Іван"},
+        headers=_auth_for(token_sid),
+    )
+    assert resp.status_code == 403
+
+
+# --------------------------------------------------------------------------- #
+# GET /guest/sessions/{id}/prize
+
+
+def test_prize_ok(client: TestClient) -> None:
+    sid = str(uuid4())
+    fake = {
+        "tier": "medium",
+        "points": 75,
+        "code": "SAVE20",
+        "label_uk": "Приз",
+        "label_en": "Prize",
+    }
+    with patch(
+        "presentations.http_guest_api.routes.guest.compute_prize",
+        return_value=fake,
+    ):
+        resp = client.get(f"/guest/sessions/{sid}/prize", headers=_auth_for(sid))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["tier"] == "medium"
+    assert body["code"] == "SAVE20"
+    assert body["points"] == 75
+
+
+def test_prize_404_on_lookup_error(client: TestClient) -> None:
+    sid = str(uuid4())
+    with patch(
+        "presentations.http_guest_api.routes.guest.compute_prize",
+        side_effect=LookupError("nope"),
+    ):
+        resp = client.get(f"/guest/sessions/{sid}/prize", headers=_auth_for(sid))
+    assert resp.status_code == 404
+
+
+def test_prize_enforces_path_matches_token(client: TestClient) -> None:
+    token_sid = str(uuid4())
+    other = str(uuid4())
+    resp = client.get(f"/guest/sessions/{other}/prize", headers=_auth_for(token_sid))
+    assert resp.status_code == 403
+
+
+def test_session_restore_passes_mode_and_points(client: TestClient) -> None:
+    sid = str(uuid4())
+    fake = {
+        "session_id": sid,
+        "feedback_source": "web_anon",
+        "mode": "targeted",
+        "points": 42,
+        "started_at": None,
+        "ended_at": None,
+        "beats": [],
+        "digs": [],
+    }
+    with patch(
+        "presentations.http_guest_api.routes.guest.restore_session",
+        return_value=fake,
+    ):
+        resp = client.get(f"/guest/sessions/{sid}", headers=_auth_for(sid))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["mode"] == "targeted"
+    assert body["points"] == 42
+
+
+# --------------------------------------------------------------------------- #
 # auth-layer guards
 
 

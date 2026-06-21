@@ -48,6 +48,8 @@ class DigState(TypedDict):
 class SessionState(TypedDict):
     session_id: str
     feedback_source: str
+    mode: str
+    points: int | None
     started_at: str | None
     ended_at: str | None
     beats: list[BeatState]
@@ -63,7 +65,8 @@ async def _load_web_session(store: StorageAdapter, session_id: str | UUID) -> di
         session_ids=[str(session_id)],
         columns=(
             "id, client_id, started_at, ended_at, feedback_source, language, "
-            "journey_template_name, mode, meal_occasion"
+            "journey_template_name, mode, meal_occasion, points, prize_tier, "
+            "guest_name, guest_email, guest_phone"
         ),
     )
     if not rows:
@@ -185,6 +188,8 @@ async def restore_session(
     return SessionState(
         session_id=str(row["id"]),
         feedback_source=str(row.get("feedback_source") or ""),
+        mode=str(row.get("mode") or "non_targeted"),
+        points=int(row["points"]) if row.get("points") is not None else None,
         started_at=str(row["started_at"]) if row.get("started_at") else None,
         ended_at=str(row["ended_at"]) if row.get("ended_at") else None,
         beats=[_beat_state(b) for b in beats],
@@ -268,11 +273,18 @@ async def dig_for_beat(
     tags_raw = current.get("tags") if current else None
     tags = [str(t) for t in tags_raw] if isinstance(tags_raw, list) else []
 
+    # Targeted restaurant sessions feed the visit occasion to the model so its
+    # guesses fit it; non_targeted / delivery pass nothing.
+    occasion = ""
+    if row.get("mode") == "targeted" and row.get("journey_template_name") == "restaurant":
+        occasion = str(row.get("meal_occasion") or "")
+
     guesses = await dig_guesses_for_beat(
         beat_label=label,
         score=score,
         tags=tags,
         restaurant_context=restaurant_context,
+        meal_occasion=occasion,
     )
     row = await store.insert_session_dig(session_id=session_id, beat_id=beat_id, guesses=guesses)
     return _dig_state(row)
@@ -379,6 +391,82 @@ def _synthesize_feedback_text(
     return " ".join(parts) if parts else "Гість не залишив оцінок по етапах вечора."
 
 
+# --------------------------------------------------------------------------- #
+# scoring (targeted gamification) + emoji transcription
+
+# Point weights (targeted mode). A pure function so the formula is unit-tested
+# and trivially re-tunable; it is product logic, so it lives here, not in config.
+_PTS_BEAT = 5
+_PTS_TAG = 3
+_PTS_DIG = 15
+_PTS_LONG_TEXT = 20  # bonus on top of a dig answer when free_text is substantial
+_PTS_VOICE = 30
+_PTS_EMAIL = 40
+_LONG_TEXT_MIN = 50
+
+
+def score_for_session(
+    beats: list[dict[str, Any]],
+    digs: list[dict[str, Any]],
+    *,
+    has_email: bool,
+) -> int:
+    """Total gamification points for a session. Pure — no I/O."""
+    points = 0
+    for beat in beats:
+        if beat.get("skipped"):
+            continue
+        if beat.get("score") is not None:
+            points += _PTS_BEAT
+        tags = beat.get("tags")
+        if isinstance(tags, list):
+            points += _PTS_TAG * len(tags)
+    for dig in digs:
+        if dig.get("voice_object_key"):
+            points += _PTS_VOICE
+            continue
+        if dig.get("accepted_guess_id") is not None:
+            points += _PTS_DIG
+            continue
+        text = dig.get("free_text")
+        if text:
+            points += _PTS_DIG
+            if len(str(text).strip()) >= _LONG_TEXT_MIN:
+                points += _PTS_LONG_TEXT
+    if has_email:
+        points += _PTS_EMAIL
+    return points
+
+
+def tier_for_points(points: int) -> str:
+    """Map a point total to a prize tier (small ≤40, medium ≤120, large >120)."""
+    if points <= 40:
+        return "small"
+    if points <= 120:
+        return "medium"
+    return "large"
+
+
+# Per-score UK phrase for the emoji ribbon, written at finalize so the admin
+# renders the mood without an LLM call. Mood faces map 1..5.
+EMOJI_TO_PHRASE_UK: dict[int, str] = {
+    1: "розчарування",
+    2: "не сподобалось",
+    3: "нормально",
+    4: "сподобалось",
+    5: "захоплення",
+}
+
+
+def beat_transcription_uk(*, score: int | None, skipped: bool) -> str:
+    """Short UK transcription of a beat's mood for the admin ribbon."""
+    if skipped:
+        return "пропустив"
+    if score is None:
+        return "без оцінки"
+    return EMOJI_TO_PHRASE_UK.get(int(score), "нормально")
+
+
 async def finalize_session(
     session_id: str | UUID,
     *,
@@ -386,8 +474,9 @@ async def finalize_session(
     db: Client | None = None,
 ) -> None:
     """Synthesize the session's beat ribbon into feedback text, run it through
-    `analyze_feedback`, persist summary + ended_at on the session row. No-op
-    if the session is already finalized (`ended_at` is not null)."""
+    `analyze_feedback`, compute gamification points + prize tier, write a UK
+    transcription on each beat, and persist everything on the session row.
+    No-op if the session is already finalized (`ended_at` is not null)."""
     store = _storage(storage, db)
     row = await _load_web_session(store, session_id)
     if row.get("ended_at"):
@@ -400,10 +489,132 @@ async def finalize_session(
     text = _synthesize_feedback_text(journey, beats, digs)
     summary = await analyze_feedback(text)
 
+    points = score_for_session(beats, digs, has_email=bool(row.get("guest_email")))
+    tier = tier_for_points(points)
+
+    # Per-beat UK transcription for the admin ribbon (cheap, no LLM call).
+    for beat in beats:
+        await store.upsert_session_beat(
+            session_id=session_id,
+            beat_id=str(beat.get("beat_id")),
+            patch={
+                "emoji_transcription_uk": beat_transcription_uk(
+                    score=int(beat["score"]) if beat.get("score") is not None else None,
+                    skipped=bool(beat.get("skipped")),
+                )
+            },
+        )
+
     patch: dict[str, Any] = {
         "feedback_raw_text": text,
         "feedback_summary": summary.model_dump(),
         "ended_at": datetime.now(UTC).isoformat(),
         "language": "uk",
+        "points": points,
+        "prize_tier": tier,
     }
     await store.update_session(session_id, patch)
+
+
+# --------------------------------------------------------------------------- #
+# identity + prize (targeted gamification)
+
+_PRIZE_TIERS = ("small", "medium", "large")
+
+
+async def identify_guest(
+    session_id: str | UUID,
+    *,
+    name: str,
+    email: str | None = None,
+    phone: str | None = None,
+    storage: StorageAdapter | None = None,
+    db: Client | None = None,
+) -> dict[str, str | None]:
+    """Attach a guest name + optional contact to a web session. `name` is
+    required; `email` is loosely validated when present."""
+    if not name or not name.strip():
+        raise ValueError("name is required")
+    if email is not None and email.strip() and "@" not in email:
+        raise ValueError("invalid email")
+    store = _storage(storage, db)
+    await _load_web_session(store, session_id)
+    patch: dict[str, Any] = {"guest_name": name.strip()}
+    if email is not None:
+        patch["guest_email"] = email.strip() or None
+    if phone is not None:
+        patch["guest_phone"] = phone.strip() or None
+    rows = await store.update_session(session_id, patch)
+    if not rows:
+        raise LookupError(f"session {session_id} not found")
+    out = rows[0]
+    return {
+        "name": out.get("guest_name"),
+        "email": out.get("guest_email"),
+        "phone": out.get("guest_phone"),
+    }
+
+
+async def compute_prize(
+    session_id: str | UUID,
+    *,
+    storage: StorageAdapter | None = None,
+    db: Client | None = None,
+) -> dict[str, Any]:
+    """Resolve a session's prize: its tier (from stored points once finalized,
+    else computed live) plus the owner-configured code/label for that tier."""
+    store = _storage(storage, db)
+    row = await _load_web_session(store, session_id)
+    if row.get("ended_at") and row.get("points") is not None:
+        points = int(row.get("points") or 0)
+        tier = str(row.get("prize_tier") or tier_for_points(points))
+    else:
+        beats = await store.fetch_session_beats(session_id=session_id)
+        digs = await store.fetch_session_digs(session_id=session_id)
+        points = score_for_session(beats, digs, has_email=bool(row.get("guest_email")))
+        tier = tier_for_points(points)
+    cfg = await store.fetch_prize_tier(tier=tier)
+    return {
+        "tier": tier,
+        "points": points,
+        "code": str(cfg.get("code") or "") if cfg else "",
+        "label_uk": str(cfg.get("label_uk") or "") if cfg else "",
+        "label_en": str(cfg.get("label_en") or "") if cfg else "",
+    }
+
+
+async def get_prize_tiers(
+    *,
+    storage: StorageAdapter | None = None,
+    db: Client | None = None,
+) -> list[dict[str, Any]]:
+    """All prize-tier config rows, ordered small → medium → large (admin)."""
+    store = _storage(storage, db)
+    rows = await store.fetch_prize_tiers()
+    order = {t: i for i, t in enumerate(_PRIZE_TIERS)}
+    return sorted(rows, key=lambda r: order.get(str(r.get("tier")), 99))
+
+
+async def set_prize_tier_config(
+    tier: str,
+    *,
+    code: str | None = None,
+    label_uk: str | None = None,
+    label_en: str | None = None,
+    storage: StorageAdapter | None = None,
+    db: Client | None = None,
+) -> dict[str, Any]:
+    """Upsert a single prize-tier config row (admin). At least one field set."""
+    if tier not in _PRIZE_TIERS:
+        raise ValueError(f"unknown tier {tier!r}")
+    patch: dict[str, Any] = {}
+    if code is not None:
+        patch["code"] = code
+    if label_uk is not None:
+        patch["label_uk"] = label_uk
+    if label_en is not None:
+        patch["label_en"] = label_en
+    if not patch:
+        raise ValueError("nothing to update")
+    store = _storage(storage, db)
+    return await store.upsert_prize_tier(tier=tier, patch=patch)
