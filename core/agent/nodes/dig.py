@@ -56,20 +56,38 @@ def _format_tags(tags: list[str]) -> str:
     return ", ".join(tags)
 
 
+# Meal-occasion (restaurant journey) → a short Russian phrase for the prompt.
+_OCCASION_RU = {
+    "breakfast": "завтрак",
+    "lunch": "обед",
+    "dinner": "ужин",
+    "other": "другое время",
+}
+
+
 async def dig_guesses_for_beat(
     *,
     beat_label: str,
     score: int,
     tags: list[str],
     restaurant_context: str = "",
+    meal_occasion: str = "",
 ) -> list[dict[str, str]]:
     """Generate 2–3 structured "guess" cards for a weak beat.
 
     Returns a list of dicts ready for storage: `[{id, text_uk, text_en, emoji}]`.
     The `id` is a stable short string (`g1`, `g2`, `g3`).
+
+    `meal_occasion` (targeted restaurant sessions) tells the model when the
+    guest visited, so guesses fit the occasion (a slow breakfast vs a late
+    dinner read differently).
     """
+    occasion_line = ""
+    if meal_occasion:
+        occasion_line = f"Повод визита: {_OCCASION_RU.get(meal_occasion, meal_occasion)}\n"
     user_prompt = (
         f"Контекст сервиса: {restaurant_context or '(не задан)'}\n"
+        f"{occasion_line}"
         f"Этап вечера: {beat_label}\n"
         f"Оценка гостя: {score}/5\n"
         f"Уже выбранные теги: {_format_tags(tags)}\n\n"
