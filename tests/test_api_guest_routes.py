@@ -55,6 +55,30 @@ def test_start_session_returns_id_and_token(client: TestClient) -> None:
     assert body["token"]
 
 
+def test_start_session_with_body_passes_journey_mode_meal(client: TestClient) -> None:
+    sid = str(uuid4())
+    with patch(
+        "presentations.http_guest_api.routes.guest.start_anonymous_session",
+        return_value=sid,
+    ) as m:
+        resp = client.post(
+            "/guest/sessions",
+            json={"journey": "delivery", "mode": "targeted", "meal_occasion": "dinner"},
+        )
+    assert resp.status_code == 201
+    assert m.await_args is not None
+    assert m.await_args.kwargs == {
+        "journey": "delivery",
+        "mode": "targeted",
+        "meal_occasion": "dinner",
+    }
+
+
+def test_start_session_rejects_unknown_journey(client: TestClient) -> None:
+    resp = client.post("/guest/sessions", json={"journey": "spaceship"})
+    assert resp.status_code == 422  # Literal["restaurant", "delivery"]
+
+
 # --------------------------------------------------------------------------- #
 # POST /guest/auth — 501 stub
 
@@ -93,7 +117,7 @@ def test_journey_returns_template_and_beats(client: TestClient) -> None:
         ],
     }
     with patch(
-        "presentations.http_guest_api.routes.guest.get_default_journey",
+        "presentations.http_guest_api.routes.guest.get_journey",
         return_value=fake,
     ):
         resp = client.get("/guest/journey", headers=_auth_for(sid))
@@ -103,6 +127,33 @@ def test_journey_returns_template_and_beats(client: TestClient) -> None:
     assert body["beats"][0]["beat_key"] == "food"
 
 
+def test_journey_by_name_passes_through(client: TestClient) -> None:
+    sid = str(uuid4())
+    fake = {
+        "template": {"id": "t2", "name": "delivery", "label_uk": "Д", "label_en": "D"},
+        "beats": [],
+    }
+    with patch(
+        "presentations.http_guest_api.routes.guest.get_journey",
+        return_value=fake,
+    ) as m:
+        resp = client.get("/guest/journey?name=delivery", headers=_auth_for(sid))
+    assert resp.status_code == 200
+    assert resp.json()["template"]["name"] == "delivery"
+    assert m.await_args is not None
+    assert m.await_args.args == ("delivery",)
+
+
+def test_journey_by_name_404_when_missing(client: TestClient) -> None:
+    sid = str(uuid4())
+    with patch(
+        "presentations.http_guest_api.routes.guest.get_journey",
+        return_value=None,
+    ):
+        resp = client.get("/guest/journey?name=delivery", headers=_auth_for(sid))
+    assert resp.status_code == 404
+
+
 def test_journey_requires_auth(client: TestClient) -> None:
     assert client.get("/guest/journey").status_code == 401
 
@@ -110,7 +161,7 @@ def test_journey_requires_auth(client: TestClient) -> None:
 def test_journey_500_when_unconfigured(client: TestClient) -> None:
     sid = str(uuid4())
     with patch(
-        "presentations.http_guest_api.routes.guest.get_default_journey",
+        "presentations.http_guest_api.routes.guest.get_journey",
         return_value=None,
     ):
         resp = client.get("/guest/journey", headers=_auth_for(sid))

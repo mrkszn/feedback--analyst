@@ -296,10 +296,7 @@ class InMemoryStorage:
         return rows[:limit]
 
     # ───────────────────────────────────────── guest journey (web app) ──
-    async def fetch_default_journey(self) -> dict[str, Any] | None:
-        template = next((t for t in self.journey_templates if t.get("is_default")), None)
-        if template is None:
-            return None
+    def _journey_bundle(self, template: dict[str, Any]) -> dict[str, Any]:
         beats = sorted(
             (b for b in self.journey_beats if str(b.get("template_id")) == str(template["id"])),
             key=lambda b: int(b.get("position") or 0),
@@ -313,11 +310,33 @@ class InMemoryStorage:
             out_beats.append({**beat, "tags": list(tags)})
         return {"template": dict(template), "beats": out_beats}
 
-    async def insert_web_session(self, *, client_id: int | None) -> dict[str, Any]:
+    async def fetch_default_journey(self) -> dict[str, Any] | None:
+        template = next((t for t in self.journey_templates if t.get("is_default")), None)
+        if template is None:
+            return None
+        return self._journey_bundle(template)
+
+    async def fetch_journey_by_name(self, *, name: str) -> dict[str, Any] | None:
+        template = next((t for t in self.journey_templates if t.get("name") == name), None)
+        if template is None:
+            return None
+        return self._journey_bundle(template)
+
+    async def insert_web_session(
+        self,
+        *,
+        client_id: int | None,
+        journey_template_name: str | None = None,
+        mode: str = "non_targeted",
+        meal_occasion: str | None = None,
+    ) -> dict[str, Any]:
         row: dict[str, Any] = {
             "id": str(uuid4()),
             "client_id": client_id,
             "feedback_source": "web" if client_id is not None else "web_anon",
+            "mode": mode,
+            "journey_template_name": journey_template_name,
+            "meal_occasion": meal_occasion,
             "started_at": self._now(),
             "ended_at": None,
             "feedback_summary": None,

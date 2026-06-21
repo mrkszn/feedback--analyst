@@ -20,7 +20,7 @@ from config import settings
 from core.services.guest_journey import (
     dig_for_beat,
     finalize_session,
-    get_default_journey,
+    get_journey,
     record_dig_answer,
     restore_session,
     save_beat,
@@ -38,6 +38,7 @@ from presentations.http_guest_api.schemas.guest import (
     FinalizeResponse,
     JourneyResponse,
     SessionStateOut,
+    StartSessionRequest,
     StartSessionResponse,
 )
 
@@ -54,9 +55,16 @@ def _require_path_matches_token(path_session_id: str, token_session_id: str) -> 
 
 
 @router.post("/sessions", response_model=StartSessionResponse, status_code=201)
-async def post_session() -> StartSessionResponse:
-    """Start a new anonymous web session. Returns its id + bearer token."""
-    session_id = await start_anonymous_session()
+async def post_session(body: StartSessionRequest | None = None) -> StartSessionResponse:
+    """Start a new anonymous web session. Returns its id + bearer token. The
+    optional body carries the journey/mode/meal_occasion the QR code selected;
+    a bare POST (no body) starts a default restaurant / non_targeted session."""
+    req = body or StartSessionRequest()
+    session_id = await start_anonymous_session(
+        journey=req.journey,
+        mode=req.mode,
+        meal_occasion=req.meal_occasion,
+    )
     token = issue_session_token(session_id, settings.guest_session_secret)
     return StartSessionResponse(session_id=session_id, token=token)
 
@@ -72,12 +80,18 @@ async def post_auth() -> dict[str, str]:
 
 
 @router.get("/journey", response_model=JourneyResponse)
-async def get_journey(
+async def get_journey_route(
     _: Annotated[str, Depends(current_guest_session)],
+    name: str | None = None,
 ) -> JourneyResponse:
-    journey = await get_default_journey()
+    """Journey bundle. Without `?name=` returns the default (restaurant);
+    `?name=delivery` returns that named journey. A missing default is a server
+    misconfiguration (500); a missing named journey is a 404."""
+    journey = await get_journey(name)
     if journey is None:
-        raise HTTPException(status_code=500, detail="no default journey configured")
+        if name is None:
+            raise HTTPException(status_code=500, detail="no default journey configured")
+        raise HTTPException(status_code=404, detail=f"journey {name!r} not found")
     return JourneyResponse.model_validate(journey)
 
 

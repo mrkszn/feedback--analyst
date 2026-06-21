@@ -18,6 +18,7 @@ from core.services.guest_journey import (
     dig_for_beat,
     finalize_session,
     get_default_journey,
+    get_journey,
     record_dig_answer,
     restore_session,
     save_beat,
@@ -101,6 +102,36 @@ def _seed_journey(mem: InMemoryStorage) -> dict[str, str]:
     }
 
 
+def _seed_delivery(mem: InMemoryStorage) -> dict[str, str]:
+    """A second, non-default 'delivery' journey with one beat ('courier')."""
+    template_id = str(uuid4())
+    courier_id = str(uuid4())
+    mem.journey_templates.append(
+        {
+            "id": template_id,
+            "name": "delivery",
+            "label_uk": "Доставка",
+            "label_en": "Delivery",
+            "is_default": False,
+            "created_at": "2026-06-01T00:00:00+00:00",
+        }
+    )
+    mem.journey_beats.append(
+        {
+            "id": courier_id,
+            "template_id": template_id,
+            "position": 1,
+            "beat_key": "courier",
+            "label_uk": "Кур'єр",
+            "label_en": "Courier",
+            "icon": "🛵",
+            "input_type": "mood_slider",
+            "created_at": "2026-06-01T00:00:00+00:00",
+        }
+    )
+    return {"template_id": template_id, "courier_id": courier_id}
+
+
 def _seed_dig(mem: InMemoryStorage, *, sid: str, beat_id: str, dig_id: str = "d1") -> str:
     mem.session_digs.append(
         {
@@ -138,6 +169,35 @@ async def test_get_default_journey_none_when_unconfigured() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# get_journey (by name)
+
+
+async def test_get_journey_by_name_returns_named_template() -> None:
+    mem = InMemoryStorage()
+    _seed_journey(mem)  # restaurant (default)
+    _seed_delivery(mem)
+    journey = await get_journey("delivery", storage=mem)
+    assert journey is not None
+    assert journey["template"]["name"] == "delivery"
+    assert [b["beat_key"] for b in journey["beats"]] == ["courier"]
+
+
+async def test_get_journey_no_name_returns_default() -> None:
+    mem = InMemoryStorage()
+    _seed_journey(mem)
+    _seed_delivery(mem)
+    journey = await get_journey(storage=mem)
+    assert journey is not None
+    assert journey["template"]["name"] == "restaurant"
+
+
+async def test_get_journey_unknown_name_returns_none() -> None:
+    mem = InMemoryStorage()
+    _seed_journey(mem)
+    assert await get_journey("spaceship", storage=mem) is None
+
+
+# --------------------------------------------------------------------------- #
 # start_anonymous_session
 
 
@@ -148,6 +208,27 @@ async def test_start_anonymous_session_creates_web_anon_row() -> None:
     row = mem.sessions[0]
     assert row["feedback_source"] == "web_anon"
     assert row["client_id"] is None
+    # defaults captured on the row
+    assert row["journey_template_name"] == "restaurant"
+    assert row["mode"] == "non_targeted"
+    assert row["meal_occasion"] is None
+
+
+async def test_start_anonymous_session_captures_delivery_targeted() -> None:
+    mem = InMemoryStorage()
+    sid = await start_anonymous_session("delivery", "targeted", "dinner", storage=mem)
+    assert sid
+    row = mem.sessions[0]
+    assert row["journey_template_name"] == "delivery"
+    assert row["mode"] == "targeted"
+    # meal_occasion is restaurant-only; dropped for delivery
+    assert row["meal_occasion"] is None
+
+
+async def test_start_anonymous_session_keeps_meal_occasion_for_restaurant() -> None:
+    mem = InMemoryStorage()
+    await start_anonymous_session("restaurant", "non_targeted", "breakfast", storage=mem)
+    assert mem.sessions[0]["meal_occasion"] == "breakfast"
 
 
 # --------------------------------------------------------------------------- #
@@ -375,3 +456,30 @@ async def test_finalize_session_is_idempotent() -> None:
     with patch("core.services.guest_journey.analyze_feedback", new=spy):
         await finalize_session(sid, storage=mem)
     spy.assert_not_awaited()
+
+
+async def test_finalize_session_uses_the_sessions_own_journey() -> None:
+    """A delivery session must synthesize against the delivery journey, not the
+    default restaurant one — its beat ids only exist in the delivery template."""
+    mem = InMemoryStorage()
+    _seed_journey(mem)  # restaurant is the default
+    delivery = _seed_delivery(mem)
+    sid = await start_anonymous_session("delivery", storage=mem)
+    await save_beat(sid, delivery["courier_id"], score=2, storage=mem)
+
+    summary = FeedbackSummary(
+        summary="Кур'єр запізнився.",
+        sentiment="negative",
+        topics=["доставка"],
+        emotion="annoyed",
+    )
+    with patch(
+        "core.services.guest_journey.analyze_feedback",
+        new=AsyncMock(return_value=summary),
+    ) as m:
+        await finalize_session(sid, storage=mem)
+
+    assert m.await_args is not None
+    raw_text: str = m.await_args.args[0]
+    assert "Кур'єр" in raw_text
+    assert "2/5" in raw_text
