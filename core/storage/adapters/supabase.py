@@ -507,6 +507,127 @@ class SupabaseStorage:
             return None
         return await self._journey_bundle(template)
 
+    async def list_journeys(self) -> list[dict[str, Any]]:
+        db = self._db
+        tpl_resp = await asyncio.to_thread(
+            lambda: (
+                db.table("journey_templates")
+                .select("*")
+                .order("is_default", desc=True)
+                .order("name", desc=False)
+                .execute()
+            )
+        )
+        return [await self._journey_bundle(t) for t in _rows(tpl_resp)]
+
+    async def insert_journey(self, *, payload: dict[str, Any]) -> dict[str, Any]:
+        db = self._db
+        resp = await asyncio.to_thread(
+            lambda: db.table("journey_templates").insert(payload).execute()
+        )
+        return _first(resp)
+
+    async def update_journey_template(
+        self, *, name: str, patch: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        db = self._db
+        resp = await asyncio.to_thread(
+            lambda: db.table("journey_templates").update(patch).eq("name", name).execute()
+        )
+        return _rows(resp)
+
+    async def unset_default_journeys(self, *, except_name: str | None = None) -> None:
+        db = self._db
+
+        def _run() -> Any:
+            q = db.table("journey_templates").update({"is_default": False}).eq("is_default", True)
+            if except_name is not None:
+                q = q.neq("name", except_name)
+            return q.execute()
+
+        await asyncio.to_thread(_run)
+
+    async def delete_journey_template(self, *, name: str) -> list[dict[str, Any]]:
+        db = self._db
+        resp = await asyncio.to_thread(
+            lambda: db.table("journey_templates").delete().eq("name", name).execute()
+        )
+        return _rows(resp)
+
+    async def count_sessions_for_journey(self, *, name: str) -> int:
+        db = self._db
+        resp = await asyncio.to_thread(
+            lambda: (
+                db.table("sessions")
+                .select("id", count="exact")  # type: ignore[arg-type]
+                .eq("journey_template_name", name)
+                .limit(1)
+                .execute()
+            )
+        )
+        count = getattr(resp, "count", None)
+        return int(count) if count is not None else len(_rows(resp))
+
+    async def upsert_journey_beat(
+        self, *, template_id: str | UUID, beat_key: str, patch: dict[str, Any]
+    ) -> dict[str, Any]:
+        db = self._db
+        payload: dict[str, Any] = {
+            "template_id": str(template_id),
+            "beat_key": beat_key,
+            **patch,
+        }
+        resp = await asyncio.to_thread(
+            lambda: (
+                db.table("journey_beats")
+                .upsert(payload, on_conflict="template_id,beat_key")
+                .execute()
+            )
+        )
+        return _first(resp)
+
+    async def delete_journey_beat(
+        self, *, template_id: str | UUID, beat_key: str
+    ) -> list[dict[str, Any]]:
+        db = self._db
+        resp = await asyncio.to_thread(
+            lambda: (
+                db.table("journey_beats")
+                .delete()
+                .eq("template_id", str(template_id))
+                .eq("beat_key", beat_key)
+                .execute()
+            )
+        )
+        return _rows(resp)
+
+    async def upsert_beat_tag(
+        self, *, beat_id: str | UUID, tag_key: str, patch: dict[str, Any]
+    ) -> dict[str, Any]:
+        db = self._db
+        payload: dict[str, Any] = {
+            "beat_id": str(beat_id),
+            "tag_key": tag_key,
+            **patch,
+        }
+        resp = await asyncio.to_thread(
+            lambda: db.table("beat_tags").upsert(payload, on_conflict="beat_id,tag_key").execute()
+        )
+        return _first(resp)
+
+    async def delete_beat_tag(self, *, beat_id: str | UUID, tag_key: str) -> list[dict[str, Any]]:
+        db = self._db
+        resp = await asyncio.to_thread(
+            lambda: (
+                db.table("beat_tags")
+                .delete()
+                .eq("beat_id", str(beat_id))
+                .eq("tag_key", tag_key)
+                .execute()
+            )
+        )
+        return _rows(resp)
+
     async def insert_web_session(
         self,
         *,

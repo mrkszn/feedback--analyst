@@ -149,6 +149,63 @@ class StorageAdapter(Protocol):
         `fetch_default_journey`; `None` if no template has that name."""
         ...
 
+    async def list_journeys(self) -> list[dict[str, Any]]:
+        """Every journey bundle (template + ordered beats + tags), ordered with
+        the default first, then by name."""
+        ...
+
+    async def insert_journey(self, *, payload: dict[str, Any]) -> dict[str, Any]:
+        """Insert a journey_templates row and return it. Caller guarantees the
+        single-default invariant (unsets the previous default first)."""
+        ...
+
+    async def update_journey_template(
+        self, *, name: str, patch: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        """Patch a journey_templates row by name. Returns updated rows (empty
+        when no template has that name)."""
+        ...
+
+    async def unset_default_journeys(self, *, except_name: str | None = None) -> None:
+        """Clear `is_default` on every template (optionally keeping `except_name`)
+        so a new default can be set without violating the single-default index."""
+        ...
+
+    async def delete_journey_template(self, *, name: str) -> list[dict[str, Any]]:
+        """Delete a journey_templates row by name (FK-cascades beats + tags).
+        Returns the deleted rows (empty when none matched)."""
+        ...
+
+    async def count_sessions_for_journey(self, *, name: str) -> int:
+        """How many sessions reference this template by `journey_template_name`
+        (delete guard)."""
+        ...
+
+    async def upsert_journey_beat(
+        self, *, template_id: str | UUID, beat_key: str, patch: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Insert-or-update a journey_beats row keyed by (template_id, beat_key).
+        `patch` may include position/label_uk/label_en/icon/input_type."""
+        ...
+
+    async def delete_journey_beat(
+        self, *, template_id: str | UUID, beat_key: str
+    ) -> list[dict[str, Any]]:
+        """Delete a journey_beats row by (template_id, beat_key); FK-cascades its
+        tags. Returns the deleted rows."""
+        ...
+
+    async def upsert_beat_tag(
+        self, *, beat_id: str | UUID, tag_key: str, patch: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Insert-or-update a beat_tags row keyed by (beat_id, tag_key). `patch`
+        may include position/label_uk/label_en."""
+        ...
+
+    async def delete_beat_tag(self, *, beat_id: str | UUID, tag_key: str) -> list[dict[str, Any]]:
+        """Delete a beat_tags row by (beat_id, tag_key). Returns the deleted rows."""
+        ...
+
     async def insert_web_session(
         self,
         *,

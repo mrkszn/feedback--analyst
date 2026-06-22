@@ -323,6 +323,145 @@ class InMemoryStorage:
             return None
         return self._journey_bundle(template)
 
+    async def list_journeys(self) -> list[dict[str, Any]]:
+        templates = sorted(
+            self.journey_templates,
+            key=lambda t: (not t.get("is_default"), str(t.get("name") or "")),
+        )
+        return [self._journey_bundle(t) for t in templates]
+
+    async def insert_journey(self, *, payload: dict[str, Any]) -> dict[str, Any]:
+        row: dict[str, Any] = {
+            "id": str(uuid4()),
+            "is_default": False,
+            "created_at": self._now(),
+            **payload,
+        }
+        self.journey_templates.append(row)
+        return dict(row)
+
+    async def update_journey_template(
+        self, *, name: str, patch: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        updated: list[dict[str, Any]] = []
+        for tpl in self.journey_templates:
+            if tpl.get("name") == name:
+                tpl.update(patch)
+                updated.append(dict(tpl))
+        return updated
+
+    async def unset_default_journeys(self, *, except_name: str | None = None) -> None:
+        for tpl in self.journey_templates:
+            if tpl.get("name") != except_name:
+                tpl["is_default"] = False
+
+    async def delete_journey_template(self, *, name: str) -> list[dict[str, Any]]:
+        deleted = [dict(t) for t in self.journey_templates if t.get("name") == name]
+        if not deleted:
+            return []
+        removed_ids = {str(t["id"]) for t in deleted}
+        self.journey_templates = [t for t in self.journey_templates if t.get("name") != name]
+        beat_ids = {
+            str(b["id"]) for b in self.journey_beats if str(b.get("template_id")) in removed_ids
+        }
+        self.journey_beats = [
+            b for b in self.journey_beats if str(b.get("template_id")) not in removed_ids
+        ]
+        self.beat_tags = [t for t in self.beat_tags if str(t.get("beat_id")) not in beat_ids]
+        return deleted
+
+    async def count_sessions_for_journey(self, *, name: str) -> int:
+        return sum(1 for s in self.sessions if s.get("journey_template_name") == name)
+
+    async def upsert_journey_beat(
+        self, *, template_id: str | UUID, beat_key: str, patch: dict[str, Any]
+    ) -> dict[str, Any]:
+        existing = next(
+            (
+                b
+                for b in self.journey_beats
+                if str(b.get("template_id")) == str(template_id) and b.get("beat_key") == beat_key
+            ),
+            None,
+        )
+        if existing is not None:
+            existing.update(patch)
+            return dict(existing)
+        row: dict[str, Any] = {
+            "id": str(uuid4()),
+            "template_id": str(template_id),
+            "beat_key": beat_key,
+            "position": 0,
+            "label_uk": "",
+            "label_en": "",
+            "icon": "",
+            "input_type": "mood_slider",
+            "created_at": self._now(),
+            **patch,
+        }
+        self.journey_beats.append(row)
+        return dict(row)
+
+    async def delete_journey_beat(
+        self, *, template_id: str | UUID, beat_key: str
+    ) -> list[dict[str, Any]]:
+        deleted = [
+            dict(b)
+            for b in self.journey_beats
+            if str(b.get("template_id")) == str(template_id) and b.get("beat_key") == beat_key
+        ]
+        if not deleted:
+            return []
+        removed_ids = {str(b["id"]) for b in deleted}
+        self.journey_beats = [
+            b
+            for b in self.journey_beats
+            if not (str(b.get("template_id")) == str(template_id) and b.get("beat_key") == beat_key)
+        ]
+        self.beat_tags = [t for t in self.beat_tags if str(t.get("beat_id")) not in removed_ids]
+        return deleted
+
+    async def upsert_beat_tag(
+        self, *, beat_id: str | UUID, tag_key: str, patch: dict[str, Any]
+    ) -> dict[str, Any]:
+        existing = next(
+            (
+                t
+                for t in self.beat_tags
+                if str(t.get("beat_id")) == str(beat_id) and t.get("tag_key") == tag_key
+            ),
+            None,
+        )
+        if existing is not None:
+            existing.update(patch)
+            return dict(existing)
+        row: dict[str, Any] = {
+            "id": str(uuid4()),
+            "beat_id": str(beat_id),
+            "tag_key": tag_key,
+            "position": 0,
+            "label_uk": "",
+            "label_en": "",
+            **patch,
+        }
+        self.beat_tags.append(row)
+        return dict(row)
+
+    async def delete_beat_tag(self, *, beat_id: str | UUID, tag_key: str) -> list[dict[str, Any]]:
+        deleted = [
+            dict(t)
+            for t in self.beat_tags
+            if str(t.get("beat_id")) == str(beat_id) and t.get("tag_key") == tag_key
+        ]
+        if not deleted:
+            return []
+        self.beat_tags = [
+            t
+            for t in self.beat_tags
+            if not (str(t.get("beat_id")) == str(beat_id) and t.get("tag_key") == tag_key)
+        ]
+        return deleted
+
     async def insert_web_session(
         self,
         *,
