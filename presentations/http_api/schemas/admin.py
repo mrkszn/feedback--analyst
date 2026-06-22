@@ -270,6 +270,77 @@ class PrizeTierUpdate(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
+# journeys (admin CRUD — templates + beats + tags)
+
+InputType = Literal["mood_slider", "chip_pick", "yes_no"]
+
+
+class BeatTagOut(BaseModel):
+    id: str
+    tag_key: str
+    position: int
+    label_uk: str
+    label_en: str
+
+
+class JourneyBeatFullOut(BaseModel):
+    id: str
+    beat_key: str
+    position: int
+    label_uk: str
+    label_en: str
+    icon: str
+    input_type: str
+    tags: list[BeatTagOut] = []
+
+
+class JourneyOut(BaseModel):
+    name: str
+    label_uk: str
+    label_en: str
+    is_default: bool
+    beats: list[JourneyBeatFullOut] = []
+
+
+class JourneysResponse(BaseModel):
+    journeys: list[JourneyOut]
+
+
+class JourneyCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    label_uk: str = Field(min_length=1, max_length=120)
+    label_en: str = Field(min_length=1, max_length=120)
+    is_default: bool = False
+
+
+class JourneyUpdate(BaseModel):
+    """Partial update of one template — only provided fields change. `is_default`
+    may only be set to True (promote); un-defaulting is rejected by the service."""
+
+    label_uk: str | None = Field(default=None, max_length=120)
+    label_en: str | None = Field(default=None, max_length=120)
+    is_default: bool | None = None
+
+
+class JourneyBeatUpsert(BaseModel):
+    """Upsert one beat on a journey (keyed by beat_key in the path)."""
+
+    position: int | None = Field(default=None, ge=0)
+    label_uk: str | None = Field(default=None, max_length=120)
+    label_en: str | None = Field(default=None, max_length=120)
+    icon: str | None = Field(default=None, max_length=16)
+    input_type: InputType | None = None
+
+
+class BeatTagUpsert(BaseModel):
+    """Upsert one chip tag on a beat (keyed by tag_key in the path)."""
+
+    position: int | None = Field(default=None, ge=0)
+    label_uk: str | None = Field(default=None, max_length=120)
+    label_en: str | None = Field(default=None, max_length=120)
+
+
+# --------------------------------------------------------------------------- #
 # shared query helpers
 
 

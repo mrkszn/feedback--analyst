@@ -256,3 +256,302 @@ def test_ask_returns_answer(client: TestClient) -> None:
 def test_ask_requires_auth(client: TestClient) -> None:
     resp = client.post("/admin/ask", json={"question": "x"})
     assert resp.status_code == 401
+
+
+# --------------------------------------------------------------------------- #
+# /admin/journeys — CRUD
+
+_JOURNEY_BUNDLE = {
+    "template": {
+        "id": "tpl-1",
+        "name": "delivery",
+        "label_uk": "Доставка",
+        "label_en": "Delivery",
+        "is_default": False,
+    },
+    "beats": [
+        {
+            "id": "beat-1",
+            "beat_key": "order",
+            "position": 1,
+            "label_uk": "Замовлення",
+            "label_en": "Order",
+            "icon": "🛒",
+            "input_type": "mood_slider",
+            "tags": [
+                {
+                    "id": "tag-1",
+                    "tag_key": "app_buggy",
+                    "position": 1,
+                    "label_uk": "Глюки",
+                    "label_en": "Buggy",
+                }
+            ],
+        }
+    ],
+}
+
+
+def test_journeys_requires_auth(client: TestClient) -> None:
+    assert client.get("/admin/journeys").status_code == 401
+
+
+def test_journeys_list_returns_bundles(client: TestClient) -> None:
+    token = _token()
+    with (
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch(
+            "presentations.http_api.routes.admin.list_journeys",
+            return_value=[_JOURNEY_BUNDLE],
+        ),
+    ):
+        resp = client.get("/admin/journeys", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["journeys"][0]["name"] == "delivery"
+    assert body["journeys"][0]["beats"][0]["beat_key"] == "order"
+    assert body["journeys"][0]["beats"][0]["tags"][0]["tag_key"] == "app_buggy"
+
+
+def test_journey_create_returns_bundle(client: TestClient) -> None:
+    token = _token()
+    with (
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch("presentations.http_api.routes.admin.create_journey", return_value=None) as m,
+        patch("presentations.http_api.routes.admin.get_journey", return_value=_JOURNEY_BUNDLE),
+    ):
+        resp = client.post(
+            "/admin/journeys",
+            json={"name": "delivery", "label_uk": "Доставка", "label_en": "Delivery"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert resp.status_code == 201
+    assert resp.json()["name"] == "delivery"
+    _, kwargs = m.call_args
+    assert kwargs["name"] == "delivery"
+    assert kwargs["is_default"] is False
+
+
+def test_journey_create_duplicate_maps_to_400(client: TestClient) -> None:
+    token = _token()
+    with (
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch(
+            "presentations.http_api.routes.admin.create_journey",
+            side_effect=ValueError("journey 'delivery' already exists"),
+        ),
+    ):
+        resp = client.post(
+            "/admin/journeys",
+            json={"name": "delivery", "label_uk": "Д", "label_en": "D"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert resp.status_code == 400
+    assert "already exists" in resp.json()["detail"]
+
+
+def test_journey_update_returns_bundle(client: TestClient) -> None:
+    token = _token()
+    with (
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch("presentations.http_api.routes.admin.update_journey", return_value=None) as m,
+        patch("presentations.http_api.routes.admin.get_journey", return_value=_JOURNEY_BUNDLE),
+    ):
+        resp = client.put(
+            "/admin/journeys/delivery",
+            json={"label_uk": "Кур'єр"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert resp.status_code == 200
+    _, kwargs = m.call_args
+    assert kwargs["name"] == "delivery"
+    assert kwargs["label_uk"] == "Кур'єр"
+
+
+def test_journey_update_missing_maps_to_404(client: TestClient) -> None:
+    token = _token()
+    with (
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch(
+            "presentations.http_api.routes.admin.update_journey",
+            side_effect=LookupError("journey 'ghost' not found"),
+        ),
+    ):
+        resp = client.put(
+            "/admin/journeys/ghost",
+            json={"label_uk": "X"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert resp.status_code == 404
+
+
+def test_journey_update_unset_default_maps_to_400(client: TestClient) -> None:
+    token = _token()
+    with (
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch(
+            "presentations.http_api.routes.admin.update_journey",
+            side_effect=ValueError("cannot unset default; promote another journey instead"),
+        ),
+    ):
+        resp = client.put(
+            "/admin/journeys/restaurant",
+            json={"is_default": False},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert resp.status_code == 400
+
+
+def test_journey_delete_returns_204(client: TestClient) -> None:
+    token = _token()
+    with (
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch("presentations.http_api.routes.admin.delete_journey", return_value=None) as m,
+    ):
+        resp = client.delete(
+            "/admin/journeys/delivery", headers={"Authorization": f"Bearer {token}"}
+        )
+    assert resp.status_code == 204
+    _, kwargs = m.call_args
+    assert kwargs["name"] == "delivery"
+
+
+def test_journey_delete_default_maps_to_400(client: TestClient) -> None:
+    token = _token()
+    with (
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch(
+            "presentations.http_api.routes.admin.delete_journey",
+            side_effect=ValueError("cannot delete the default journey; promote another one first"),
+        ),
+    ):
+        resp = client.delete(
+            "/admin/journeys/restaurant", headers={"Authorization": f"Bearer {token}"}
+        )
+    assert resp.status_code == 400
+
+
+def test_journey_delete_missing_maps_to_404(client: TestClient) -> None:
+    token = _token()
+    with (
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch(
+            "presentations.http_api.routes.admin.delete_journey",
+            side_effect=LookupError("journey 'ghost' not found"),
+        ),
+    ):
+        resp = client.delete("/admin/journeys/ghost", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 404
+
+
+def test_beat_upsert_returns_bundle(client: TestClient) -> None:
+    token = _token()
+    with (
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch("presentations.http_api.routes.admin.upsert_journey_beat", return_value=None) as m,
+        patch("presentations.http_api.routes.admin.get_journey", return_value=_JOURNEY_BUNDLE),
+    ):
+        resp = client.put(
+            "/admin/journeys/delivery/beats/order",
+            json={"label_uk": "Замовлення", "input_type": "chip_pick"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert resp.status_code == 200
+    _, kwargs = m.call_args
+    assert kwargs["journey_name"] == "delivery"
+    assert kwargs["beat_key"] == "order"
+    assert kwargs["input_type"] == "chip_pick"
+
+
+def test_beat_upsert_bad_input_type_maps_to_422(client: TestClient) -> None:
+    """An unknown input_type is rejected by the schema enum before the service."""
+    token = _token()
+    with patch("presentations.http_api.deps.auth.is_admin", return_value=True):
+        resp = client.put(
+            "/admin/journeys/delivery/beats/order",
+            json={"input_type": "slider_xxx"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert resp.status_code == 422
+
+
+def test_beat_delete_returns_204(client: TestClient) -> None:
+    token = _token()
+    with (
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch("presentations.http_api.routes.admin.delete_journey_beat", return_value=None) as m,
+    ):
+        resp = client.delete(
+            "/admin/journeys/delivery/beats/order",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert resp.status_code == 204
+    _, kwargs = m.call_args
+    assert kwargs["journey_name"] == "delivery"
+    assert kwargs["beat_key"] == "order"
+
+
+def test_beat_delete_missing_maps_to_404(client: TestClient) -> None:
+    token = _token()
+    with (
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch(
+            "presentations.http_api.routes.admin.delete_journey_beat",
+            side_effect=LookupError("beat 'ghost' not found in journey 'delivery'"),
+        ),
+    ):
+        resp = client.delete(
+            "/admin/journeys/delivery/beats/ghost",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert resp.status_code == 404
+
+
+def test_tag_upsert_returns_bundle(client: TestClient) -> None:
+    token = _token()
+    with (
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch("presentations.http_api.routes.admin.upsert_beat_tag", return_value=None) as m,
+        patch("presentations.http_api.routes.admin.get_journey", return_value=_JOURNEY_BUNDLE),
+    ):
+        resp = client.put(
+            "/admin/journeys/delivery/beats/order/tags/app_buggy",
+            json={"label_uk": "Глюки", "label_en": "Buggy"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert resp.status_code == 200
+    _, kwargs = m.call_args
+    assert kwargs["journey_name"] == "delivery"
+    assert kwargs["beat_key"] == "order"
+    assert kwargs["tag_key"] == "app_buggy"
+
+
+def test_tag_delete_returns_204(client: TestClient) -> None:
+    token = _token()
+    with (
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch("presentations.http_api.routes.admin.delete_beat_tag", return_value=None) as m,
+    ):
+        resp = client.delete(
+            "/admin/journeys/delivery/beats/order/tags/app_buggy",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert resp.status_code == 204
+    _, kwargs = m.call_args
+    assert kwargs["tag_key"] == "app_buggy"
+
+
+def test_tag_delete_missing_maps_to_404(client: TestClient) -> None:
+    token = _token()
+    with (
+        patch("presentations.http_api.deps.auth.is_admin", return_value=True),
+        patch(
+            "presentations.http_api.routes.admin.delete_beat_tag",
+            side_effect=LookupError("tag 'ghost' not found on beat 'order'"),
+        ),
+    ):
+        resp = client.delete(
+            "/admin/journeys/delivery/beats/order/tags/ghost",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert resp.status_code == 404

@@ -100,6 +100,26 @@ curl 'http://localhost:8000/admin/metrics/visit_recency/clients?value=Больш
 # 14) Clients — поиск по имени/id ИЛИ мультифильтр по темам
 curl 'http://localhost:8000/admin/clients?query=Alice' -H "Authorization: Bearer $JWT"
 curl 'http://localhost:8000/admin/clients?topics=сервис&topics=еда&match=and' -H "Authorization: Bearer $JWT"
+
+# 15) Journeys — CRUD гостевых журналов (templates + beats + tags)
+curl 'http://localhost:8000/admin/journeys' -H "Authorization: Bearer $JWT"
+curl -X POST http://localhost:8000/admin/journeys \
+  -H 'Content-Type: application/json' -H "Authorization: Bearer $JWT" \
+  -d '{"name": "bar", "label_uk": "Бар", "label_en": "Bar", "is_default": false}'
+curl -X PUT http://localhost:8000/admin/journeys/bar \
+  -H 'Content-Type: application/json' -H "Authorization: Bearer $JWT" \
+  -d '{"label_uk": "Коктейль-бар"}'
+curl -X DELETE http://localhost:8000/admin/journeys/bar -H "Authorization: Bearer $JWT"
+# beats
+curl -X PUT http://localhost:8000/admin/journeys/bar/beats/arrival \
+  -H 'Content-Type: application/json' -H "Authorization: Bearer $JWT" \
+  -d '{"position": 1, "label_uk": "Прихід", "label_en": "Arrival", "icon": "🚪", "input_type": "mood_slider"}'
+curl -X DELETE http://localhost:8000/admin/journeys/bar/beats/arrival -H "Authorization: Bearer $JWT"
+# tags
+curl -X PUT http://localhost:8000/admin/journeys/bar/beats/arrival/tags/crowded \
+  -H 'Content-Type: application/json' -H "Authorization: Bearer $JWT" \
+  -d '{"position": 1, "label_uk": "Натовп", "label_en": "Crowded"}'
+curl -X DELETE http://localhost:8000/admin/journeys/bar/beats/arrival/tags/crowded -H "Authorization: Bearer $JWT"
 ```
 
 `GET/PUT /admin/settings` — на текущего админа (telegram_id берётся из JWT,
@@ -123,6 +143,35 @@ curl 'http://localhost:8000/admin/clients?topics=сервис&topics=еда&matc
 - `GET /admin/clients` — `?query=` (имя или telegram_id) **или**
   `?topics=a&topics=b&match=and|or` (мультифильтр; `and` = пересечение, сужает;
   default `and`). Ровно один из `query`/`topics` обязателен, иначе 400.
+
+**Journeys CRUD (15)** — управление гостевыми журналами для admin app
+(read-side — это публичный `GET /guest/journey`):
+
+- `GET /admin/journeys` → `{journeys: [{name, label_uk, label_en, is_default,
+  beats: [{id, beat_key, position, label_uk, label_en, icon, input_type,
+  tags: [{id, tag_key, position, label_uk, label_en}]}]}]}` — все шаблоны,
+  default первым, beats и tags упорядочены по `position`.
+- `POST /admin/journeys` `{name, label_uk, label_en, is_default?}` → создаёт
+  шаблон, 201 + полный bundle. Дубликат `name` или пустые поля → 400. При
+  `is_default: true` прежний default снимается (ровно один default всегда).
+- `PUT /admin/journeys/{name}` `{label_uk?, label_en?, is_default?}` — partial
+  update. `is_default: true` промоутит шаблон в дефолт (снимает прежний);
+  `is_default: false` запрещён (400 — нельзя «раздефолтить», промоуть другой).
+  Нет шаблона → 404.
+- `DELETE /admin/journeys/{name}` → 204. FK-cascade удаляет beats + tags.
+  Защита: дефолтный журнал (400 — сперва промоуть другой) и журнал, на который
+  ссылается хоть одна сессия (400). Нет шаблона → 404.
+- `PUT /admin/journeys/{name}/beats/{beat_key}`
+  `{position?, label_uk?, label_en?, icon?, input_type?}` — upsert beat по
+  `(journey, beat_key)`. `input_type ∈ {mood_slider, chip_pick, yes_no}` (иначе
+  422 на уровне схемы). Возвращает обновлённый bundle. Нет журнала → 404.
+- `DELETE /admin/journeys/{name}/beats/{beat_key}` → 204 (cascade на tags),
+  404 если beat не найден.
+- `PUT /admin/journeys/{name}/beats/{beat_key}/tags/{tag_key}`
+  `{position?, label_uk?, label_en?}` — upsert tag по `(beat, tag_key)`.
+  Возвращает обновлённый bundle. Нет журнала/beat → 404.
+- `DELETE /admin/journeys/{name}/beats/{beat_key}/tags/{tag_key}` → 204,
+  404 если tag не найден.
 
 ## Out of scope сейчас
 

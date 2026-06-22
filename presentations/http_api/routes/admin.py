@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -21,7 +21,17 @@ from core.services.analytics import (
     summary_overview,
     topic_histogram,
 )
-from core.services.guest_journey import get_prize_tiers, set_prize_tier_config
+from core.services.guest_journey import get_journey, get_prize_tiers, set_prize_tier_config
+from core.services.journeys_admin import (
+    create_journey,
+    delete_beat_tag,
+    delete_journey,
+    delete_journey_beat,
+    list_journeys,
+    update_journey,
+    upsert_beat_tag,
+    upsert_journey_beat,
+)
 from core.services.questions import get_question_expected_type, list_questions
 from core.services.sessions import list_sessions, session_detail
 from core.services.settings import get_admin_settings, update_admin_settings
@@ -35,9 +45,15 @@ from presentations.http_api.schemas.admin import (
     AskResponse,
     AuthRequest,
     AuthResponse,
+    BeatTagUpsert,
     CategoryCountOut,
     ClientProfileResponse,
     ClientsResponse,
+    JourneyBeatUpsert,
+    JourneyCreate,
+    JourneyOut,
+    JourneysResponse,
+    JourneyUpdate,
     MetricPointOut,
     MetricsResponse,
     OverviewResponse,
@@ -442,3 +458,167 @@ async def put_prize(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return PrizeTierOut.model_validate(row)
+
+
+# --------------------------------------------------------------------------- #
+# /admin/journeys — guest-journey CRUD (templates + beats + tags)
+
+
+def _journey_out(bundle: dict[str, Any]) -> JourneyOut:
+    """Flatten a storage journey bundle `{template, beats}` into JourneyOut."""
+    tpl = bundle.get("template", {})
+    return JourneyOut.model_validate(
+        {
+            "name": tpl.get("name"),
+            "label_uk": tpl.get("label_uk"),
+            "label_en": tpl.get("label_en"),
+            "is_default": bool(tpl.get("is_default")),
+            "beats": bundle.get("beats", []),
+        }
+    )
+
+
+@router.get("/journeys", response_model=JourneysResponse)
+async def journeys_list(
+    _admin_id: Annotated[int, Depends(current_admin)],
+) -> JourneysResponse:
+    bundles = await list_journeys()
+    return JourneysResponse(journeys=[_journey_out(b) for b in bundles])
+
+
+@router.post("/journeys", response_model=JourneyOut, status_code=status.HTTP_201_CREATED)
+async def journey_create(
+    body: JourneyCreate,
+    _admin_id: Annotated[int, Depends(current_admin)],
+) -> JourneyOut:
+    try:
+        await create_journey(
+            name=body.name,
+            label_uk=body.label_uk,
+            label_en=body.label_en,
+            is_default=body.is_default,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    bundle = await get_journey(body.name)
+    if bundle is None:  # pragma: no cover — just inserted
+        raise HTTPException(status_code=404, detail=f"journey {body.name!r} not found")
+    return _journey_out(bundle)
+
+
+@router.put("/journeys/{name}", response_model=JourneyOut)
+async def journey_update(
+    name: str,
+    body: JourneyUpdate,
+    _admin_id: Annotated[int, Depends(current_admin)],
+) -> JourneyOut:
+    try:
+        await update_journey(
+            name=name,
+            label_uk=body.label_uk,
+            label_en=body.label_en,
+            is_default=body.is_default,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    bundle = await get_journey(name)
+    if bundle is None:  # pragma: no cover — just updated
+        raise HTTPException(status_code=404, detail=f"journey {name!r} not found")
+    return _journey_out(bundle)
+
+
+@router.delete("/journeys/{name}", status_code=status.HTTP_204_NO_CONTENT)
+async def journey_delete(
+    name: str,
+    _admin_id: Annotated[int, Depends(current_admin)],
+) -> None:
+    try:
+        await delete_journey(name=name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.put("/journeys/{name}/beats/{beat_key}", response_model=JourneyOut)
+async def journey_beat_upsert(
+    name: str,
+    beat_key: str,
+    body: JourneyBeatUpsert,
+    _admin_id: Annotated[int, Depends(current_admin)],
+) -> JourneyOut:
+    try:
+        await upsert_journey_beat(
+            journey_name=name,
+            beat_key=beat_key,
+            position=body.position,
+            label_uk=body.label_uk,
+            label_en=body.label_en,
+            icon=body.icon,
+            input_type=body.input_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    bundle = await get_journey(name)
+    if bundle is None:  # pragma: no cover — journey existed above
+        raise HTTPException(status_code=404, detail=f"journey {name!r} not found")
+    return _journey_out(bundle)
+
+
+@router.delete("/journeys/{name}/beats/{beat_key}", status_code=status.HTTP_204_NO_CONTENT)
+async def journey_beat_delete(
+    name: str,
+    beat_key: str,
+    _admin_id: Annotated[int, Depends(current_admin)],
+) -> None:
+    try:
+        await delete_journey_beat(journey_name=name, beat_key=beat_key)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.put("/journeys/{name}/beats/{beat_key}/tags/{tag_key}", response_model=JourneyOut)
+async def beat_tag_upsert(
+    name: str,
+    beat_key: str,
+    tag_key: str,
+    body: BeatTagUpsert,
+    _admin_id: Annotated[int, Depends(current_admin)],
+) -> JourneyOut:
+    try:
+        await upsert_beat_tag(
+            journey_name=name,
+            beat_key=beat_key,
+            tag_key=tag_key,
+            position=body.position,
+            label_uk=body.label_uk,
+            label_en=body.label_en,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    bundle = await get_journey(name)
+    if bundle is None:  # pragma: no cover — journey existed above
+        raise HTTPException(status_code=404, detail=f"journey {name!r} not found")
+    return _journey_out(bundle)
+
+
+@router.delete(
+    "/journeys/{name}/beats/{beat_key}/tags/{tag_key}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def beat_tag_delete(
+    name: str,
+    beat_key: str,
+    tag_key: str,
+    _admin_id: Annotated[int, Depends(current_admin)],
+) -> None:
+    try:
+        await delete_beat_tag(journey_name=name, beat_key=beat_key, tag_key=tag_key)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
