@@ -26,10 +26,21 @@ uv run python -m api
 
 ## Auth flow
 
-1. Mini App открывается из Telegram → получает `window.Telegram.WebApp.initData`
-2. `POST /admin/auth { init_data }` → backend валидирует HMAC по
-   bot-token, проверяет наличие telegram_id в `admin_users`, выдаёт JWT
-3. Все остальные `/admin/*` ждут `Authorization: Bearer <jwt>`
+Два параллельных пути логина выдают **одинаковый** JWT — он работает на всех
+`/admin/*` без различий:
+
+1. **Mini App (`POST /admin/auth { init_data }`)** — открывается из Telegram,
+   валидирует HMAC по bot-token (`secret = HMAC("WebAppData", bot_token)`),
+   проверяет telegram_id в `admin_users`, выдаёт JWT.
+2. **Web (`POST /admin/auth/web`)** — Telegram **Login Widget** на обычном
+   браузере (`admin.<domain>`). Принимает payload виджета as-is, валидирует
+   подпись (`secret = SHA256(bot_token)`), проверяет id в whitelist-env
+   `ADMIN_TELEGRAM_IDS`, и допускает пользователя в `admin_users` (чтобы JWT
+   работал на всех `/admin/*`). Ошибки: подделка/просрочка → **401**
+   (`auth_data_expired` для устаревшего ≥24ч), не в whitelist → **403**
+   (`not_authorized`), пустой `ADMIN_TELEGRAM_IDS` → никто не залогинится.
+
+Все остальные `/admin/*` ждут `Authorization: Bearer <jwt>`.
 
 JWT TTL = 24 ч (см. `api/auth/jwt.py`). При revoke админа из таблицы
 `admin_users` — следующий же запрос вернёт 401 (проверка живёт в
@@ -38,10 +49,15 @@ JWT TTL = 24 ч (см. `api/auth/jwt.py`). При revoke админа из та�
 ## Endpoints
 
 ```bash
-# 1) Auth — обменять initData на JWT
+# 1) Auth — обменять initData на JWT (Mini App)
 curl -X POST http://localhost:8000/admin/auth \
   -H 'Content-Type: application/json' \
   -d '{"init_data": "auth_date=...&user=...&hash=..."}'
+
+# 1b) Auth web — payload Telegram Login Widget на JWT (обычный браузер)
+curl -X POST http://localhost:8000/admin/auth/web \
+  -H 'Content-Type: application/json' \
+  -d '{"id":123456789,"first_name":"Имя","username":"tg","auth_date":1719000000,"hash":"<hex>"}'
 
 # 2) Overview — сводка за период
 curl 'http://localhost:8000/admin/overview?date_from=2026-01-01&date_to=2026-01-31' \

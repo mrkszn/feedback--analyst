@@ -8,7 +8,7 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from config import settings
-from core.services.admin_auth import is_admin
+from core.services.admin_auth import ensure_admin, is_admin
 from core.services.analytics import (
     aggregate_metric,
     categorical_distribution,
@@ -36,7 +36,11 @@ from core.services.questions import get_question_expected_type, list_questions
 from core.services.sessions import list_sessions, session_detail
 from core.services.settings import get_admin_settings, update_admin_settings
 from presentations.http_api.auth.jwt import issue_token
-from presentations.http_api.auth.telegram_webapp import validate_initdata
+from presentations.http_api.auth.telegram_webapp import (
+    parse_admin_ids,
+    validate_initdata,
+    verify_login_widget,
+)
 from presentations.http_api.deps.auth import current_admin
 from presentations.http_api.schemas.admin import (
     AdminSettingsResponse,
@@ -70,6 +74,7 @@ from presentations.http_api.schemas.admin import (
     SessionsResponse,
     TopicCountOut,
     TopicsResponse,
+    WebAuthRequest,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -122,6 +127,38 @@ async def auth(body: AuthRequest) -> AuthResponse:
     if not await is_admin(user.id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="not an admin")
 
+    token = issue_token(user.id, settings.mini_app_session_secret)
+    return AuthResponse(token=token, telegram_id=user.id)
+
+
+# --------------------------------------------------------------------------- #
+# POST /admin/auth/web — Telegram Login Widget (web OAuth, plain browser)
+
+
+@router.post("/auth/web", response_model=AuthResponse)
+async def auth_web(body: WebAuthRequest) -> AuthResponse:
+    """Authenticate the admin web app via a Telegram Login Widget callback.
+
+    Parallel to /admin/auth (Mini App initData): verifies the widget signature,
+    gates on the ADMIN_TELEGRAM_IDS whitelist, then issues the SAME JWT. The
+    whitelisted user is admitted into admin_users so the token works on every
+    /admin/* route just like a Mini App token.
+    """
+    try:
+        user = verify_login_widget(
+            body.model_dump(mode="json", exclude_none=True),
+            settings.telegram_admin_bot_token,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+        ) from exc
+
+    if user.id not in parse_admin_ids(settings.admin_telegram_ids):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="not_authorized")
+
+    await ensure_admin(user.id, name=user.first_name)
     token = issue_token(user.id, settings.mini_app_session_secret)
     return AuthResponse(token=token, telegram_id=user.id)
 

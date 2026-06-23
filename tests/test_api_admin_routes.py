@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from config import settings
-from presentations.http_api.auth.jwt import issue_token
+from presentations.http_api.auth.jwt import issue_token, verify_token
 from presentations.http_api.main import create_app
 
 VALID_BOT_TOKEN = "999:fake-admin-bot-token"
@@ -77,6 +77,67 @@ def test_auth_rejects_non_admin(client: TestClient) -> None:
         resp = client.post("/admin/auth", json={"init_data": init_data})
     assert resp.status_code == 403
     assert resp.json()["detail"] == "not an admin"
+
+
+# --------------------------------------------------------------------------- #
+# /admin/auth/web — Telegram Login Widget (web OAuth)
+
+
+def _sign_widget(data: dict[str, object], bot_token: str = VALID_BOT_TOKEN) -> dict[str, object]:
+    check = "\n".join(f"{k}={data[k]}" for k in sorted(data))
+    secret = hashlib.sha256(bot_token.encode()).digest()
+    h = hmac.new(secret, check.encode(), hashlib.sha256).hexdigest()
+    return {**data, "hash": h}
+
+
+def test_auth_web_succeeds_for_whitelisted(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "admin_telegram_ids", "7,8")
+    payload = _sign_widget({"id": 7, "first_name": "Bob", "auth_date": int(time.time())})
+    with patch("presentations.http_api.routes.admin.ensure_admin", return_value=None):
+        resp = client.post("/admin/auth/web", json=payload)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["telegram_id"] == 7
+    # same JWT shape as /admin/auth → works on every /admin/* route (acceptance #6)
+    assert verify_token(body["token"], SECRET)["telegram_id"] == 7
+
+
+def test_auth_web_rejects_forged_hash(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "admin_telegram_ids", "7")
+    payload = _sign_widget({"id": 7, "auth_date": int(time.time())})
+    payload["hash"] = "0" * 64
+    with patch("presentations.http_api.routes.admin.ensure_admin", return_value=None):
+        resp = client.post("/admin/auth/web", json=payload)
+    assert resp.status_code == 401
+
+
+def test_auth_web_rejects_expired(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "admin_telegram_ids", "7")
+    payload = _sign_widget({"id": 7, "auth_date": int(time.time()) - 100_000})
+    resp = client.post("/admin/auth/web", json=payload)
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "auth_data_expired"
+
+
+def test_auth_web_rejects_not_whitelisted(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "admin_telegram_ids", "8,9")
+    payload = _sign_widget({"id": 7, "auth_date": int(time.time())})
+    resp = client.post("/admin/auth/web", json=payload)
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "not_authorized"
+
+
+def test_auth_web_empty_whitelist_forbids_everyone(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "admin_telegram_ids", "")
+    payload = _sign_widget({"id": 7, "auth_date": int(time.time())})
+    resp = client.post("/admin/auth/web", json=payload)
+    assert resp.status_code == 403
 
 
 # --------------------------------------------------------------------------- #
