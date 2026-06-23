@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     # Разовый токен для регистрации первого админа через /claim.
     # Source of truth по админам — таблица admin_users в Supabase.
     admin_bootstrap_token: str = ""
+    # Whitelist для веб-логина админки через Telegram Login Widget
+    # (POST /admin/auth/web): CSV из telegram-id. Пусто = никто не залогинится
+    # этим путём. Mini App (/admin/auth) этот список не использует.
+    admin_telegram_ids: str = ""
 
     openai_api_key: str = ""
     openai_chat_model: str = "gpt-5.5"

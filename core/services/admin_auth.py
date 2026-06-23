@@ -54,6 +54,31 @@ async def claim_admin(
     return True
 
 
+async def ensure_admin(
+    telegram_id: int,
+    *,
+    name: str | None = None,
+    storage: StorageAdapter | None = None,
+    db: Client | None = None,
+) -> None:
+    """Idempotently ensure `telegram_id` is in admin_users.
+
+    Used by the web-login path (`POST /admin/auth/web`), whose whitelist is the
+    ADMIN_TELEGRAM_IDS env. Admitting the row here keeps the issued JWT working
+    on every `/admin/*` route (which re-checks `is_admin`). No-op if already an
+    admin; tolerates a concurrent insert (Postgres unique violation 23505).
+    """
+    store = _storage(storage, db)
+    if await store.is_admin(telegram_id):
+        return
+    try:
+        await store.insert_admin(telegram_id=telegram_id, name=name)
+    except Exception as exc:
+        if "23505" in str(exc):
+            return
+        raise
+
+
 async def add_admin(
     telegram_id: int,
     *,

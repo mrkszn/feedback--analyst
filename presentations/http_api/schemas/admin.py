@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # --------------------------------------------------------------------------- #
 # auth
@@ -13,6 +13,22 @@ from pydantic import BaseModel, Field
 
 class AuthRequest(BaseModel):
     init_data: str = Field(description="Raw Telegram.WebApp.initData query string")
+
+
+class WebAuthRequest(BaseModel):
+    """Telegram Login Widget callback, forwarded as-is by the admin web frontend.
+    Extra fields Telegram may add are allowed and folded into the signature
+    check; only `id`, `auth_date` and `hash` are required."""
+
+    model_config = ConfigDict(extra="allow")
+
+    id: int
+    auth_date: int
+    hash: str
+    first_name: str | None = None
+    last_name: str | None = None
+    username: str | None = None
+    photo_url: str | None = None
 
 
 class AuthResponse(BaseModel):
